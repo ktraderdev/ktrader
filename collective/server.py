@@ -21,7 +21,7 @@ logger = logging.getLogger("collective")
 # ── Config ─────────────────────────────────────────────────────
 
 DB_PATH = os.environ.get("COLLECTIVE_DB", str(Path(__file__).resolve().parent.parent / "data" / "collective.db"))
-MEMBER_CAP = int(os.environ.get("COLLECTIVE_MEMBER_CAP", "200"))
+MEMBER_CAP = int(os.environ.get("COLLECTIVE_MEMBER_CAP", "500"))
 RATE_LIMIT = int(os.environ.get("COLLECTIVE_RATE_LIMIT", "100"))  # signals/hour
 
 # ── Database ───────────────────────────────────────────────────
@@ -62,6 +62,12 @@ def init_db():
             submitted_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS waitlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals(ticker);
         CREATE INDEX IF NOT EXISTS idx_signals_submitted ON signals(submitted_at);
         CREATE INDEX IF NOT EXISTS idx_signals_instance ON signals(instance_id);
@@ -100,13 +106,13 @@ def verify_member(x_collective_key: str = Header(...)) -> str:
 
 _rate_counts: dict[str, list[float]] = {}
 
-def check_rate_limit(instance_id: str):
+def check_rate_limit(instance_id: str, limit: int = RATE_LIMIT):
     now = datetime.now(timezone.utc).timestamp()
     hour_ago = now - 3600
     window = _rate_counts.get(instance_id, [])
     window = [t for t in window if t > hour_ago]
-    if len(window) >= RATE_LIMIT:
-        raise HTTPException(status_code=429, detail=f"Rate limit: {RATE_LIMIT} signals/hour")
+    if len(window) >= limit:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
     window.append(now)
     _rate_counts[instance_id] = window
 
@@ -269,9 +275,12 @@ def member_count():
 
 # ── Admin: Register a new member ───────────────────────────────
 
+class AdminRegisterRequest(BaseModel):
+    api_key: str = Field(..., min_length=16)
+
 @app.post("/collective/v1/admin/register")
 def register_member(
-    api_key: str,
+    req: AdminRegisterRequest,
     admin_secret: str = Header(...)
 ):
     """Admin-only: register a new member. Requires COLLECTIVE_ADMIN_SECRET header."""
@@ -284,7 +293,7 @@ def register_member(
         if count >= MEMBER_CAP:
             raise HTTPException(status_code=403, detail=f"Membership capped at {MEMBER_CAP}")
 
-        key_hash = hash_key(api_key)
+        key_hash = hash_key(req.api_key)
         instance_id = key_hash[:16]
 
         try:
@@ -304,8 +313,9 @@ class JoinRequest(BaseModel):
     api_key: str = Field(..., min_length=16, description="Collective API key (you choose)")
 
 @app.post("/collective/v1/join")
-def join_collective(req: JoinRequest):
+def join_collective(req: JoinRequest, x_real_ip: str = Header("anonymous")):
     """Public self-service: join the collective. Membership is capped."""
+    check_rate_limit(f"join:{x_real_ip}", limit=10)
     with get_db() as db:
         count = db.execute("SELECT COUNT(*) FROM members WHERE is_active = 1").fetchone()[0]
         if count >= MEMBER_CAP:
@@ -323,6 +333,24 @@ def join_collective(req: JoinRequest):
             raise HTTPException(status_code=409, detail="Already registered")
 
     return {"status": "registered", "instance_id": instance_id, "members": count + 1, "cap": MEMBER_CAP}
+
+
+# ── Waitlist ──────────────────────────────────────────────────
+
+class WaitlistRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=254, pattern=r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+@app.post("/collective/v1/waitlist")
+def join_waitlist(req: WaitlistRequest, x_real_ip: str = Header("anonymous")):
+    """Public: join the waitlist when membership is full."""
+    check_rate_limit(f"waitlist:{x_real_ip}", limit=5)
+    with get_db() as db:
+        try:
+            db.execute("INSERT INTO waitlist (email) VALUES (?)", (req.email,))
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Already on the waitlist")
+        pos = db.execute("SELECT COUNT(*) FROM waitlist").fetchone()[0]
+    return {"status": "waitlisted", "position": pos}
 
 
 if __name__ == "__main__":

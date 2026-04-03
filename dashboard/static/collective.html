@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ktrader</title>
+<title>ktrader - The Collective</title>
 <link rel="icon" type="image/png" href="/logo-1x.png">
 <style>
 @font-face {
@@ -29,8 +29,8 @@ a:hover { color: #fff; }
 .wrap { max-width: 640px; margin: 0 auto; padding: 80px 24px 100px; }
 
 nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 80px; }
-nav .mark { font-weight: 600; font-size: 15px; letter-spacing: -0.02em; text-decoration: none; color: #fff; }
-nav .links { display: flex; gap: 24px; font-size: 14px; color: #777; }
+nav .mark { font-weight: 600; font-size: 15px; text-decoration: none; color: #fff; }
+nav .links { display: flex; gap: 24px; font-size: 14px; }
 nav .links a { color: #777; text-decoration: none; }
 nav .links a:hover { color: #fff; }
 
@@ -43,22 +43,6 @@ h1 {
   color: #fff;
 }
 
-.sub { font-size: 18px; color: #888; margin-bottom: 48px; line-height: 1.5; }
-
-.install {
-  background: #1c1c1c;
-  border: 1px solid #2a2a2a;
-  padding: 20px 24px;
-  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
-  font-size: 13px;
-  color: #999;
-  margin-bottom: 48px;
-  overflow-x: auto;
-}
-.install .cmd { color: #555; user-select: none; }
-
-.sep { border: none; border-top: 1px solid #2a2a2a; margin: 48px 0; }
-
 .section-label {
   font-size: 12px;
   font-weight: 500;
@@ -68,15 +52,9 @@ h1 {
   margin-bottom: 16px;
 }
 
-.features {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
-  margin-bottom: 48px;
-}
-@media (max-width: 540px) { .features { grid-template-columns: 1fr; gap: 24px; } }
-.feat h3 { font-size: 15px; font-weight: 500; margin-bottom: 4px; color: #eee; }
-.feat p { font-size: 14px; color: #777; margin: 0; }
+.sep { border: none; border-top: 1px solid #2a2a2a; margin: 48px 0; }
+
+p.body { color: #999; margin-bottom: 20px; font-size: 15px; }
 
 .counters {
   display: flex;
@@ -85,8 +63,6 @@ h1 {
 }
 .counter .n { font-size: 40px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: #fff; }
 .counter .l { font-size: 13px; color: #666; margin-top: 4px; }
-
-p.body { color: #999; margin-bottom: 20px; font-size: 15px; }
 
 ol.steps { padding-left: 20px; margin-bottom: 32px; color: #999; font-size: 15px; }
 ol.steps li { margin-bottom: 8px; }
@@ -140,6 +116,16 @@ ol.steps li { margin-bottom: 8px; }
 .result.ok { display: block; background: #0a1f0a; color: #4ade80; border: 1px solid #1a3a1a; }
 .result.err { display: block; background: #1f0a0a; color: #f87171; border: 1px solid #3a1a1a; }
 
+.cap-note {
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  padding: 20px 24px;
+  margin-bottom: 40px;
+  font-size: 14px;
+  color: #888;
+  line-height: 1.7;
+}
+
 footer {
   margin-top: 80px;
   padding-top: 20px;
@@ -160,39 +146,8 @@ footer {
   </div>
 </nav>
 
-<h1>Prediction market trading, automated</h1>
-<p class="sub">An open-source bot for Kalshi. Multiple AI models analyze every market independently and reach consensus. Add your signals to the collective and get the crowd's read back.</p>
-
-<div class="install">
-  <span class="cmd">$</span> git clone https://github.com/ktraderdev/ktrader<br>
-  <span class="cmd">$</span> cp .env.template .env<br>
-  <span class="cmd">$</span> docker-compose up
-</div>
-
-<div class="section-label">How it works</div>
-<div class="features">
-  <div class="feat">
-    <h3>Multi-model consensus</h3>
-    <p>Local and cloud LLMs debate each market. A third model arbitrates.</p>
-  </div>
-  <div class="feat">
-    <h3>Data enrichment</h3>
-    <p>Polymarket, PredictIt, weather, sports odds, economic data. Context beyond the price.</p>
-  </div>
-  <div class="feat">
-    <h3>Calibration feedback</h3>
-    <p>Predictions scored against outcomes. Historical accuracy corrects future bias.</p>
-  </div>
-  <div class="feat">
-    <h3>Dry-run default</h3>
-    <p>Paper-trade first. Full journal. Real money only when you're ready.</p>
-  </div>
-</div>
-
-<hr class="sep">
-
-<div class="section-label">The Collective</div>
-<p class="body">Each ktrader instance runs independently. The collective pools their predictions anonymously. Members get back the crowd signal -- average probability, consensus direction, confidence spread -- without exposing identity or P&L.</p>
+<h1>The Collective</h1>
+<p class="body">Each ktrader instance makes independent predictions. The collective aggregates them anonymously. Every member's bot gets access to the crowd signal -- average probability, consensus direction, confidence distribution -- without exposing identity, P&L, or positions.</p>
 
 <div class="counters">
   <div class="counter"><div class="n" id="mc">--</div><div class="l">members</div></div>
@@ -200,17 +155,23 @@ footer {
   <div class="counter"><div class="n" id="left">--</div><div class="l">spots open</div></div>
 </div>
 
-<div class="section-label">Signal flow</div>
+<div class="cap-note">
+  <strong style="color: #ccc;">Why the cap?</strong> The edge is inversely proportional to the number of participants. With hundreds of members, each gets meaningful alpha. At mass adoption, the collective signal converges to the market price itself. The cap keeps the collective useful.
+</div>
+
+<hr class="sep">
+
+<div class="section-label">How it works</div>
 <ol class="steps">
   <li>Your bot analyzes a market and picks a side.</li>
-  <li>It sends an anonymized signal: probability, direction, confidence.</li>
-  <li>The server aggregates and returns the crowd view.</li>
-  <li>Your bot factors crowd data into its next decision.</li>
+  <li>It sends an anonymized signal: probability, direction, confidence. Nothing else.</li>
+  <li>The server aggregates and returns the crowd view for that market.</li>
+  <li>Your bot folds crowd data into its next decision. Better information, same autonomy.</li>
 </ol>
 
-<div class="section-label">Privacy</div>
+<div class="section-label">What crosses the wire</div>
 <div class="privacy">
-  <div class="row"><div class="tag y">Shared</div><div class="desc">Probability, side, confidence, model source, market category</div></div>
+  <div class="row"><div class="tag y">Shared</div><div class="desc">Predicted probability, side, confidence, model source, market category</div></div>
   <div class="row"><div class="tag n">Never</div><div class="desc">Account identity, position size, P&L, portfolio, API credentials</div></div>
 </div>
 <p style="font-size: 13px; color: #555; margin-bottom: 0;">Your identity is a hash of the key you choose below. No Kalshi credentials ever leave your machine.</p>

@@ -306,7 +306,7 @@ def balance():
             "total": round((bal.get("balance", 0) + bal.get("portfolio_value", 0)) / 100, 2),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/api/positions")
@@ -461,7 +461,7 @@ def position_timeline():
         timeline.sort(key=lambda x: x.get("close_time") or "9999")
         return jsonify(timeline)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/api/calibration")
@@ -479,7 +479,7 @@ def calibration():
             results[bot] = cal
             j.close()
         except Exception as e:
-            results[bot] = {"n": 0, "error": str(e)}
+            results[bot] = {"n": 0, "error": "Unavailable"}
     return jsonify(results)
 
 
@@ -560,7 +560,7 @@ def enrichment_test():
         result = cached("enrichment", 300, _compute)
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 
@@ -577,7 +577,7 @@ def collective_status():
             return jsonify(resp.json())
         return jsonify({"error": "Collective server unreachable"}), 502
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/api/variants")
 def variant_stats():
@@ -586,7 +586,7 @@ def variant_stats():
         stats = journal.get_variant_stats()
         return jsonify({"variants": stats})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/api/sports/arb")
 def sports_arb():
@@ -605,7 +605,29 @@ def sports_arb():
     except ImportError:
         return jsonify({"opportunities": [], "count": 0, "error": "Sports scanner not installed"})
     except Exception as e:
-        return jsonify({"opportunities": [], "count": 0, "error": str(e)})
+        return jsonify({"opportunities": [], "count": 0, "error": "Unavailable"})
+
+
+# Allowed config keys -- only these can be read/written via the API
+_ALLOWED_KEYS = {
+    "KALSHI_API_KEY_ID", "KALSHI_PRIVATE_KEY_PATH", "KALSHI_USE_DEMO",
+    "DRY_RUN", "MAX_BET_AMOUNT", "MAX_DAILY_LOSS", "MAX_OPEN_POSITIONS",
+    "KELLY_FRACTION", "MIN_EDGE", "SCAN_INTERVAL", "CIRCUIT_BREAKER_PCT",
+    "CATEGORIES",
+    "LLM_ENDPOINT", "LLM_ENDPOINT_FALLBACK", "LLM_MODEL", "LLM_TEMPERATURE",
+    "LLM_MAX_TOKENS",
+    "ANTHROPIC_API_KEY", "CLAUDE_MODEL", "XAI_API_KEY", "OPENAI_API_KEY",
+    "USE_DUAL_ANALYSIS", "USE_SINGLE_AGENT",
+    "FRED_API_KEY", "OPENWEATHER_API_KEY",
+    "SPORTS_ENABLED", "SPORTS_SCAN_INTERVAL", "ODDS_API_KEY",
+    "COLLECTIVE_ENABLED", "COLLECTIVE_SERVER", "COLLECTIVE_API_KEY",
+    "DB_PATH", "LOG_LEVEL", "DASHBOARD_HOST", "DASHBOARD_PORT",
+}
+_SECRET_KEYS = {
+    "KALSHI_API_KEY_ID", "ANTHROPIC_API_KEY", "XAI_API_KEY",
+    "OPENAI_API_KEY", "FRED_API_KEY", "OPENWEATHER_API_KEY",
+    "COLLECTIVE_API_KEY", "ODDS_API_KEY",
+}
 
 
 @app.route("/api/config")
@@ -622,15 +644,13 @@ def get_config():
                 key, _, value = line.partition("=")
                 key = key.strip()
                 value = value.strip().strip("'\"")
-                config[key] = value
-    # Mask sensitive values for display
+                if key in _ALLOWED_KEYS:
+                    config[key] = value
+    # Mask secret values -- show only that a value is set, not the value itself
     masked = {}
-    secret_keys = {"KALSHI_API_KEY_ID", "ANTHROPIC_API_KEY", "XAI_API_KEY",
-                   "OPENAI_API_KEY", "FRED_API_KEY", "OPENWEATHER_API_KEY",
-                   "COLLECTIVE_API_KEY", "ODDS_API_KEY"}
     for k, v in config.items():
-        if k in secret_keys and v and len(v) > 8:
-            masked[k] = v[:4] + "*" * (len(v) - 8) + v[-4:]
+        if k in _SECRET_KEYS and v:
+            masked[k] = "*" * 16
         else:
             masked[k] = v
     return jsonify({"config": masked, "has_env": env_path.exists()})
@@ -654,6 +674,16 @@ def save_config():
         existing_lines = template_path.read_text().splitlines()
 
     updates = data["config"]
+    # Reject unknown keys and sanitize values
+    for key, val in list(updates.items()):
+        if key not in _ALLOWED_KEYS:
+            return jsonify({"error": f"Unknown config key: {key}"}), 400
+        if not isinstance(val, str):
+            return jsonify({"error": f"Invalid value for {key}"}), 400
+        # Strip newlines and carriage returns to prevent env injection
+        val = val.replace("\n", "").replace("\r", "")
+        updates[key] = val
+
     updated_keys = set()
     new_lines = []
 
@@ -662,19 +692,19 @@ def save_config():
         if stripped and not stripped.startswith("#") and "=" in stripped:
             key = stripped.split("=", 1)[0].strip()
             if key in updates:
-                # Skip masked values (don't overwrite with masked string)
                 val = updates[key]
-                if "*" * 4 not in val:
-                    new_lines.append(f"{key}={val}")
-                else:
+                # Skip masked values (don't overwrite with masked placeholder)
+                if val == "*" * 16:
                     new_lines.append(line)  # keep original
+                else:
+                    new_lines.append(f"{key}={val}")
                 updated_keys.add(key)
                 continue
         new_lines.append(line)
 
-    # Append any new keys not in the file
+    # Append allowed keys not already in the file
     for key, val in updates.items():
-        if key not in updated_keys and "*" * 4 not in val:
+        if key not in updated_keys and val != "*" * 16:
             new_lines.append(f"{key}={val}")
 
     env_path.write_text("\n".join(new_lines) + "\n")
@@ -682,6 +712,7 @@ def save_config():
 
 
 @app.route("/dashboard/calibration")
+@app.route("/calibration")
 def calibration_page():
     return app.send_static_file("calibration.html")
 
@@ -694,6 +725,12 @@ def dashboard():
 @app.route("/setup")
 def setup_page():
     return app.send_static_file("setup.html")
+
+
+@app.route("/collective")
+@app.route("/collective/")
+def collective_page():
+    return app.send_static_file("collective.html")
 
 
 @app.route("/")
