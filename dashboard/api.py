@@ -14,6 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 DB_QWEN = os.environ.get("DB_PATH", str(PROJECT_ROOT / "trade_journal.db"))
 DB_CLAUDE = os.environ.get("DB_CLAUDE_PATH", str(PROJECT_ROOT / "trade_journal_claude.db"))
+DB_DEMO = str(PROJECT_ROOT / "data" / "demo_journal.db")
 
 import time as _time
 import threading
@@ -36,6 +37,36 @@ def cached(key, ttl_seconds, fn):
     return result
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+
+
+@app.before_request
+def _block_sensitive_in_demo():
+    """Block endpoints that could leak real data when in demo mode."""
+    if not _is_demo():
+        return None
+    blocked = {"/api/config", "/api/balance"}
+    if request.path in blocked:
+        if request.path == "/api/balance":
+            return jsonify({"cash": 638.47, "portfolio": 1120.74, "total": 1759.21})
+        return jsonify({"error": "Not available in demo mode"}), 403
+    if request.path == "/api/position-timeline":
+        # Synthetic timeline from demo open positions (real endpoint uses Kalshi API)
+        demo_timeline = [
+            {"ticker": "KXNFP-26APR-U180K", "title": "Will nonfarm payrolls be under 180K in April?",
+             "side": "yes", "count": 15, "exposure": 6.30, "close_time": "2026-04-26T16:00:00Z", "yes_price": 0.42},
+            {"ticker": "KXEXECORDER-26APR-A12", "title": "Will Trump sign more than 12 executive orders in April?",
+             "side": "yes", "count": 30, "exposure": 6.60, "close_time": "2026-04-30T23:59:00Z", "yes_price": 0.22},
+            {"ticker": "KXGOLDW-26APR07-A2380", "title": "Will gold close above $2380 on Apr 7?",
+             "side": "yes", "count": 12, "exposure": 5.76, "close_time": "2026-04-07T20:00:00Z", "yes_price": 0.48},
+            {"ticker": "KXHIGHTNYC-26APR05-T68", "title": "Will the high temp in NYC be >68F on Apr 5?",
+             "side": "yes", "count": 25, "exposure": 7.75, "close_time": "2026-04-05T23:59:00Z", "yes_price": 0.31},
+            {"ticker": "KXINX-26APR07-B5850", "title": "Will S&P 500 close below 5850 on Apr 7?",
+             "side": "yes", "count": 18, "exposure": 6.84, "close_time": "2026-04-07T20:00:00Z", "yes_price": 0.38},
+            {"ticker": "KXCPI-26APR-B3.2", "title": "Will CPI be below 3.2% in April?",
+             "side": "yes", "count": 20, "exposure": 7.00, "close_time": "2026-04-10T12:30:00Z", "yes_price": 0.35},
+        ]
+        return jsonify(demo_timeline)
+    return None
 
 # Lazy-init Kalshi client for balance checks
 _kalshi_client = None
@@ -81,10 +112,22 @@ def get_db(path):
         return None
 
 
+def _is_demo():
+    """Check if demo mode is requested via ?demo=1 query param."""
+    return request.args.get("demo") == "1" and os.path.exists(DB_DEMO)
+
+
+def _db_pairs():
+    """Return (bot_name, db_path) pairs, swapping to demo DB when requested."""
+    if _is_demo():
+        return [("demo", DB_DEMO)]
+    return [("qwen", DB_QWEN), ("claude", DB_CLAUDE)]
+
+
 def query_both(query_fn):
     """Run a query function against both DBs, tag results with bot name."""
     results = []
-    for bot, path in [("qwen", DB_QWEN), ("claude", DB_CLAUDE)]:
+    for bot, path in _db_pairs():
         db = get_db(path)
         if not db:
             continue
@@ -105,7 +148,7 @@ def query_both(query_fn):
 def status():
     """Bot status for both bots."""
     bots = {}
-    for bot, path in [("qwen", DB_QWEN), ("claude", DB_CLAUDE)]:
+    for bot, path in _db_pairs():
         db = get_db(path)
         if not db:
             bots[bot] = {"active": False}
@@ -188,6 +231,15 @@ def status():
     combined_pnl = sum(b.get("today", {}).get("pnl", 0) for b in bots.values() if isinstance(b, dict))
     last_scans = [b.get("last_scan") for b in bots.values() if isinstance(b, dict) and b.get("last_scan")]
 
+    # In demo mode, make last_scan appear current
+    if _is_demo():
+        from datetime import datetime, timezone
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        for b in bots.values():
+            if isinstance(b, dict) and b.get("active"):
+                b["last_scan"] = now_str
+        last_scans = [now_str]
+
     return jsonify({
         "bots": bots,
         "combined": {
@@ -268,7 +320,7 @@ def scans():
 def pnl():
     """Daily P&L history per bot."""
     results = []
-    for bot, path in [("qwen", DB_QWEN), ("claude", DB_CLAUDE)]:
+    for bot, path in _db_pairs():
         db = get_db(path)
         if not db:
             continue
@@ -324,8 +376,10 @@ def positions():
         ORDER BY t.timestamp DESC
     """).fetchall())
 
-    # Enrich with close times and web URLs from Kalshi API
+    # Enrich with close times and web URLs from Kalshi API (skip in demo — fake tickers)
     ticker_cache = {}
+    if _is_demo():
+        return jsonify(results)
     try:
         client = get_kalshi()
         for r in results:
@@ -464,6 +518,59 @@ def position_timeline():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route("/api/sectors")
+def sectors():
+    """Sector heatmap data: trades, win rate, P&L by category."""
+    results = query_both(lambda db: db.execute("""
+        SELECT
+            COALESCE(LOWER(s.category), 'unknown') as category,
+            COUNT(*) as trades,
+            SUM(CASE WHEN t.outcome='won' THEN 1 ELSE 0 END) as won,
+            SUM(CASE WHEN t.outcome='lost' THEN 1 ELSE 0 END) as lost,
+            SUM(CASE WHEN t.outcome IS NULL THEN 1 ELSE 0 END) as pending,
+            COALESCE(SUM(t.pnl), 0.0) as pnl,
+            AVG(a.arbiter_prob) as avg_prob,
+            AVG(a.arbiter_edge) as avg_edge,
+            AVG(t.price) as avg_entry
+        FROM trades t
+        JOIN analyses a ON t.analysis_id = a.id
+        JOIN scans s ON a.scan_id = s.id
+        GROUP BY LOWER(s.category)
+    """).fetchall())
+
+    # Merge results from both bots by category
+    merged = {}
+    for r in results:
+        cat = r.get("category", "unknown") or "unknown"
+        if cat not in merged:
+            merged[cat] = {"category": cat, "trades": 0, "won": 0, "lost": 0,
+                           "pending": 0, "pnl": 0.0, "avg_prob": 0, "avg_edge": 0,
+                           "avg_entry": 0, "_count": 0}
+        m = merged[cat]
+        m["trades"] += r.get("trades", 0)
+        m["won"] += r.get("won", 0)
+        m["lost"] += r.get("lost", 0)
+        m["pending"] += r.get("pending", 0)
+        m["pnl"] = round(m["pnl"] + (r.get("pnl", 0) or 0), 2)
+        m["avg_prob"] = (m["avg_prob"] * m["_count"] + (r.get("avg_prob", 0) or 0)) / (m["_count"] + 1)
+        m["avg_edge"] = (m["avg_edge"] * m["_count"] + (r.get("avg_edge", 0) or 0)) / (m["_count"] + 1)
+        m["avg_entry"] = (m["avg_entry"] * m["_count"] + (r.get("avg_entry", 0) or 0)) / (m["_count"] + 1)
+        m["_count"] += 1
+
+    out = []
+    for m in merged.values():
+        resolved = m["won"] + m["lost"]
+        m["win_rate"] = round(m["won"] / resolved, 3) if resolved > 0 else None
+        m["avg_prob"] = round(m["avg_prob"], 3)
+        m["avg_edge"] = round(m["avg_edge"], 3)
+        m["avg_entry"] = round(m["avg_entry"], 2)
+        del m["_count"]
+        out.append(m)
+
+    out.sort(key=lambda x: x["trades"], reverse=True)
+    return jsonify(out)
+
+
 @app.route("/api/calibration")
 def calibration():
     """Calibration summary from trade journal."""
@@ -472,7 +579,7 @@ def calibration():
     from trade_journal import TradeJournal
 
     results = {}
-    for bot, path in [("qwen", DB_QWEN), ("claude", DB_CLAUDE)]:
+    for bot, path in _db_pairs():
         try:
             j = TradeJournal(path)
             cal = j.get_calibration_summary()
@@ -711,6 +818,105 @@ def save_config():
     return jsonify({"status": "saved"})
 
 
+import json as _json
+
+_TUNING_PATH = PROJECT_ROOT / "data" / "tuning.json"
+_TUNING_DEFAULTS = {
+    "category_weights": {
+        "climate": 1.0, "economics": 1.0, "financials": 1.0,
+        "politics": 1.0, "science": 1.0, "health": 1.0,
+        "entertainment": 1.0, "sports": 1.0, "world": 1.0,
+    },
+    "min_confidence": "low",
+    "max_entry_price": 0.65,
+    "category_exposure_limit": 3.00,
+    "crowd_weight": 1.0,
+    "side_policy": "yes_only",
+}
+
+
+def _load_tuning() -> dict:
+    if _TUNING_PATH.exists():
+        try:
+            return _json.loads(_TUNING_PATH.read_text())
+        except Exception:
+            pass
+    return dict(_TUNING_DEFAULTS)
+
+
+@app.route("/api/tuning", methods=["GET"])
+def get_tuning():
+    return jsonify({"tuning": _load_tuning()})
+
+
+@app.route("/api/tuning", methods=["POST"])
+def save_tuning():
+    data = request.get_json(silent=True) or {}
+    tuning = data.get("tuning")
+    if not tuning or not isinstance(tuning, dict):
+        return jsonify({"error": "Missing tuning object"}), 400
+
+    # Validate category_weights
+    weights = tuning.get("category_weights", {})
+    if not isinstance(weights, dict):
+        return jsonify({"error": "Invalid category_weights"}), 400
+    for cat, w in weights.items():
+        try:
+            w = float(w)
+        except (TypeError, ValueError):
+            return jsonify({"error": f"Invalid weight for {cat}"}), 400
+        if w < 0 or w > 3.0:
+            return jsonify({"error": f"Weight for {cat} must be 0-3.0"}), 400
+        weights[cat] = round(w, 2)
+
+    # Validate min_confidence
+    conf = tuning.get("min_confidence", "low")
+    if conf not in ("low", "medium", "high"):
+        return jsonify({"error": "min_confidence must be low, medium, or high"}), 400
+
+    # Validate max_entry_price
+    try:
+        mep = float(tuning.get("max_entry_price", 0.65))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid max_entry_price"}), 400
+    if mep < 0.05 or mep > 0.95:
+        return jsonify({"error": "max_entry_price must be 0.05-0.95"}), 400
+
+    # Validate category_exposure_limit
+    try:
+        cel = float(tuning.get("category_exposure_limit", 3.0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid category_exposure_limit"}), 400
+    if cel < 0.5 or cel > 100.0:
+        return jsonify({"error": "category_exposure_limit must be 0.5-100.0"}), 400
+
+    # Validate crowd_weight
+    try:
+        cw = float(tuning.get("crowd_weight", 1.0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid crowd_weight"}), 400
+    if cw < 0 or cw > 2.0:
+        return jsonify({"error": "crowd_weight must be 0-2.0"}), 400
+
+    # Validate side_policy
+    sp = tuning.get("side_policy", "yes_only")
+    if sp not in ("yes_only", "both"):
+        return jsonify({"error": "side_policy must be yes_only or both"}), 400
+
+    clean = {
+        "category_weights": weights,
+        "min_confidence": conf,
+        "max_entry_price": round(mep, 2),
+        "category_exposure_limit": round(cel, 2),
+        "crowd_weight": round(cw, 2),
+        "side_policy": sp,
+    }
+
+    os.makedirs(_TUNING_PATH.parent, exist_ok=True)
+    _TUNING_PATH.write_text(_json.dumps(clean, indent=2) + "\n")
+    return jsonify({"status": "ok"})
+
+
 @app.route("/dashboard/calibration")
 @app.route("/calibration")
 def calibration_page():
@@ -722,6 +928,57 @@ def dashboard():
     return app.send_static_file("index.html")
 
 
+_DEMO_BANNER = '''<div style="background:#1a1e33;border-bottom:1px solid #252a40;padding:10px 24px;
+text-align:center;font-family:Inter,Segoe UI,system-ui,sans-serif;font-size:13px;color:#a5b4fc;
+letter-spacing:0.02em;position:fixed;top:0;left:0;right:0;z-index:9999">
+Demo dashboard with sample data.
+<a href="/" style="color:#818cf8;text-decoration:underline">Home</a> &middot;
+<a href="https://github.com/ktraderdev/ktrader" style="color:#818cf8;text-decoration:underline">View source</a> &middot;
+<a href="/collective" style="color:#818cf8;text-decoration:underline">Join the collective</a>
+</div>
+<style>body{padding-top:38px !important}</style>'''
+
+_DEMO_FETCH_PATCH = '''<script>
+const _origFetch = window.fetch;
+window.fetch = function(url, opts) {
+  if (typeof url === 'string' && url.startsWith('/api/')) {
+    url = url + (url.includes('?') ? '&' : '?') + 'demo=1';
+  }
+  return _origFetch.call(this, url, opts);
+};
+</script>'''
+
+
+def _serve_demo(source_file, link_rewrites=None):
+    """Serve a dashboard page with demo fetch patching and banner injected."""
+    html_path = app.static_folder + "/" + source_file
+    with open(html_path, "r") as f:
+        html = f.read()
+    # Inject fetch patch before first script
+    html = html.replace("<script>", _DEMO_FETCH_PATCH + "\n<script>", 1)
+    # Inject banner after <body>
+    html = html.replace("<body>", "<body>" + _DEMO_BANNER, 1)
+    # Rewrite links
+    if link_rewrites:
+        for old, new in link_rewrites.items():
+            html = html.replace(old, new)
+    return html
+
+
+@app.route("/demo")
+def demo_page():
+    return _serve_demo("index.html", {
+        'href="/calibration"': 'href="/demo/calibration"',
+    })
+
+
+@app.route("/demo/calibration")
+def demo_calibration_page():
+    return _serve_demo("calibration.html", {
+        'href="/"': 'href="/demo"',
+    })
+
+
 # Public-facing pages only served on ktrader.dev (DASHBOARD_MODE=public)
 _PUBLIC_MODE = os.environ.get("DASHBOARD_MODE", "") == "public"
 
@@ -731,6 +988,13 @@ def setup_page():
     if _PUBLIC_MODE:
         return app.send_static_file("setup.html")
     return app.send_static_file("index.html")
+
+
+@app.route("/faq")
+def faq_page():
+    if _PUBLIC_MODE:
+        return app.send_static_file("faq.html")
+    return redirect("https://ktrader.dev/faq")
 
 
 @app.route("/collective")

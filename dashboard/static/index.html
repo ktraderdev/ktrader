@@ -258,6 +258,39 @@ tr.manual-row { border-left: 2px solid var(--blue); }
 .score-label { color: var(--dim); }
 .score-val { font-weight: 600; }
 
+/* Sector Heatmap */
+.hm-cell {
+  flex: 1 1 auto;
+  min-width: 120px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: default;
+  transition: transform 0.1s;
+  position: relative;
+}
+.hm-cell:hover { transform: scale(1.03); }
+.hm-name {
+  font-size: 0.8em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  color: #fff;
+}
+.hm-stat {
+  font-size: 0.75em;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.5;
+}
+.hm-pnl {
+  font-size: 1.1em;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+}
+.hm-empty { color: var(--dim); font-size: 0.85em; padding: 20px 0; }
+
 /* Pagination */
 .pagination { display: flex; gap: 4px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border); justify-content: center; }
 .page-btn { background: var(--bg); border: 1px solid var(--border); color: var(--dim); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.8em; }
@@ -356,6 +389,14 @@ tr.manual-row { border-left: 2px solid var(--blue); }
   <div class="chart-container">
     <canvas id="pnl-chart" class="chart-canvas"></canvas>
     <div class="chart-empty" id="chart-empty" style="display:none">No resolved trades yet</div>
+  </div>
+</div>
+
+<!-- Sector Heatmap -->
+<div class="section">
+  <div class="section-header">Sector Heatmap</div>
+  <div id="heatmap" style="padding:16px;display:flex;flex-wrap:wrap;gap:8px;min-height:80px;">
+    <span style="color:var(--dim);font-size:0.85em">Loading...</span>
   </div>
 </div>
 
@@ -786,7 +827,7 @@ async function loadPositions() {
     <td>${t.count}</td>
     <td>${fmtPrice(t.price)}</td>
     <td ${closesClass}>${closesLabel}</td>
-    <td class="status-${t.status}">${t.status}</td>
+    <td class="status-${t.status}">${closesLabel === 'EXPIRED' && t.status === 'pending' ? '<span style="color:var(--purple)">settling</span>' : t.status}</td>
   </tr>`;
   }).join('');
 }
@@ -1135,10 +1176,62 @@ function checkDryRunMode() {
   document.getElementById('dry-run-indicator').style.display = hasDryRun ? 'inline' : 'none';
 }
 
+async function loadSectors() {
+  const res = await fetch('/api/sectors');
+  const data = await res.json();
+  const container = document.getElementById('heatmap');
+
+  if (!data || !data.length) {
+    container.innerHTML = '<span class="hm-empty">No trade data yet</span>';
+    return;
+  }
+
+  // Find extremes for color scaling
+  const pnls = data.map(d => d.pnl || 0);
+  const maxAbs = Math.max(Math.abs(Math.min(...pnls)), Math.abs(Math.max(...pnls)), 0.01);
+
+  container.innerHTML = '';
+  data.forEach(d => {
+    const pnl = d.pnl || 0;
+    const intensity = Math.min(Math.abs(pnl) / maxAbs, 1);
+    const alpha = 0.08 + intensity * 0.35;
+    const resolved = d.won + d.lost;
+    const wr = d.win_rate !== null ? (d.win_rate * 100).toFixed(0) + '%' : '--';
+
+    let bg, borderColor;
+    if (pnl > 0) {
+      bg = `rgba(52, 211, 153, ${alpha})`;
+      borderColor = `rgba(52, 211, 153, ${0.2 + intensity * 0.4})`;
+    } else if (pnl < 0) {
+      bg = `rgba(248, 113, 113, ${alpha})`;
+      borderColor = `rgba(248, 113, 113, ${0.2 + intensity * 0.4})`;
+    } else {
+      bg = 'rgba(129, 140, 248, 0.08)';
+      borderColor = 'var(--border)';
+    }
+
+    const cell = document.createElement('div');
+    cell.className = 'hm-cell';
+    cell.style.background = bg;
+    cell.style.borderColor = borderColor;
+
+    const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--dim)';
+    const pnlSign = pnl > 0 ? '+' : '';
+
+    cell.innerHTML = `
+      <div class="hm-name">${d.category}</div>
+      <div class="hm-stat">${d.trades} trades &middot; ${wr} win rate</div>
+      <div class="hm-stat">${d.won}W ${d.lost}L ${d.pending}P</div>
+      <div class="hm-pnl" style="color:${pnlColor}">${pnlSign}$${pnl.toFixed(2)}</div>
+    `;
+    container.appendChild(cell);
+  });
+}
+
 async function refresh() {
   // Each loader wrapped individually so one failure doesn't block the rest
   const safe = fn => fn().catch(e => console.warn(fn.name, e));
-  await Promise.all([safe(loadStatus), safe(loadBalance), safe(loadPnlChart)]);
+  await Promise.all([safe(loadStatus), safe(loadBalance), safe(loadPnlChart), safe(loadSectors)]);
   // Timeline and positions are slow (Kalshi API calls) — don't block trades
   safe(loadTimeline);
   await safe(loadPositions);

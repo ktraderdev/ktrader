@@ -207,6 +207,52 @@ h1 { font-size: 24px; font-weight: 600; color: #fff; margin-bottom: 8px; letter-
   </div>
 </div>
 
+<!-- Tuning -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Trade Tuning</span>
+    <span class="section-link" style="color: #555;">local overrides on analysis output</span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>Min confidence</label>
+      <select data-tuning="min_confidence">
+        <option value="low">low (trade on any confidence)</option>
+        <option value="medium">medium (skip low)</option>
+        <option value="high">high (only high confidence)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Max entry price</label>
+      <input type="text" data-tuning="max_entry_price" placeholder="0.65">
+      <span class="hint">0.05 - 0.95</span>
+    </div>
+    <div class="field">
+      <label>Category exposure limit</label>
+      <input type="text" data-tuning="category_exposure_limit" placeholder="3.00">
+      <span class="hint">$ per category</span>
+    </div>
+    <div class="field">
+      <label>Crowd signal weight</label>
+      <input type="text" data-tuning="crowd_weight" placeholder="1.0">
+      <span class="hint">0 = ignore, 1 = normal, 2 = heavy</span>
+    </div>
+    <div class="field">
+      <label>Side policy</label>
+      <select data-tuning="side_policy">
+        <option value="yes_only">YES only</option>
+        <option value="both">YES and NO</option>
+      </select>
+    </div>
+  </div>
+  <div class="section-header" style="border-top: 1px solid #2a2a2a;">
+    <span class="section-title" style="font-size: 12px; color: #666;">Category Edge Weights</span>
+    <span class="section-link" style="color: #555;">0 = skip, 1 = normal, 2 = require 2x edge</span>
+  </div>
+  <div class="fields" id="cat-weights">
+  </div>
+</div>
+
 <!-- Local LLM -->
 <div class="section">
   <div class="section-header">
@@ -373,12 +419,14 @@ h1 { font-size: 24px; font-weight: 600; color: #fff; margin-bottom: 8px; letter-
 </div>
 
 <div class="note">
-  <strong>Note:</strong> Changes are saved to your local .env file. The bot must be restarted for changes to take effect. Sensitive keys are masked after saving -- submitting a masked value leaves the original unchanged.
+  <strong>Note:</strong> Config changes are saved to .env and require a bot restart. Tuning changes are saved to data/tuning.json and take effect on the next scan cycle (no restart needed). Sensitive keys are masked -- submitting a masked value leaves the original unchanged.
 </div>
 
 </div>
 
 <script>
+const CATEGORIES = ['climate','economics','financials','politics','science','health','entertainment','sports','world'];
+
 async function load() {
   try {
     const r = await fetch('/api/config');
@@ -386,13 +434,7 @@ async function load() {
     if (!d.config) return;
     for (const [key, val] of Object.entries(d.config)) {
       const el = document.querySelector(`[data-key="${key}"]`);
-      if (el) {
-        if (el.tagName === 'SELECT') {
-          el.value = val;
-        } else {
-          el.value = val;
-        }
-      }
+      if (el) el.value = val;
     }
   } catch(e) {
     document.getElementById('status').textContent = 'Failed to load config';
@@ -400,31 +442,80 @@ async function load() {
   }
 }
 
-async function save() {
-  const config = {};
-  document.querySelectorAll('[data-key]').forEach(el => {
-    const key = el.dataset.key;
-    const val = el.value.trim();
-    if (val) config[key] = val;
-  });
+async function loadTuning() {
+  try {
+    const r = await fetch('/api/tuning');
+    const d = await r.json();
+    if (!d.tuning) return;
+    const t = d.tuning;
 
+    // Scalar fields
+    document.querySelectorAll('[data-tuning]').forEach(el => {
+      const key = el.dataset.tuning;
+      if (key in t) el.value = t[key];
+    });
+
+    // Category weights
+    const container = document.getElementById('cat-weights');
+    container.innerHTML = '';
+    const weights = t.category_weights || {};
+    CATEGORIES.forEach(cat => {
+      const w = weights[cat] !== undefined ? weights[cat] : 1.0;
+      const div = document.createElement('div');
+      div.className = 'field';
+      div.innerHTML = `<label>${cat}</label>
+        <input type="range" min="0" max="2" step="0.1" value="${w}" data-cat="${cat}"
+          style="flex:1;accent-color:#888;background:transparent;"
+          oninput="this.nextElementSibling.textContent=this.value">
+        <span class="hint" style="width:32px;text-align:right;">${w}</span>`;
+      container.appendChild(div);
+    });
+  } catch(e) {}
+}
+
+async function save() {
   const status = document.getElementById('status');
   status.textContent = 'Saving...';
   status.className = 'status';
 
+  // Save .env config
+  const config = {};
+  document.querySelectorAll('[data-key]').forEach(el => {
+    const val = el.value.trim();
+    if (val) config[el.dataset.key] = val;
+  });
+
+  // Save tuning
+  const tuning = {};
+  document.querySelectorAll('[data-tuning]').forEach(el => {
+    tuning[el.dataset.tuning] = el.value;
+  });
+  tuning.category_weights = {};
+  document.querySelectorAll('[data-cat]').forEach(el => {
+    tuning.category_weights[el.dataset.cat] = parseFloat(el.value);
+  });
+
   try {
-    const r = await fetch('/api/config', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({config})
-    });
-    const d = await r.json();
-    if (r.ok) {
-      status.textContent = 'Saved. Restart bot to apply.';
+    const [r1, r2] = await Promise.all([
+      fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({config})
+      }),
+      fetch('/api/tuning', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tuning})
+      })
+    ]);
+    const d1 = await r1.json();
+    const d2 = await r2.json();
+    if (r1.ok && r2.ok) {
+      status.textContent = 'Saved. Restart bot to apply .env changes. Tuning is live.';
       status.className = 'status ok';
-      load(); // reload masked values
+      load();
     } else {
-      status.textContent = d.error || 'Save failed';
+      status.textContent = d1.error || d2.error || 'Save failed';
       status.className = 'status err';
     }
   } catch(e) {
@@ -434,6 +525,7 @@ async function save() {
 }
 
 load();
+loadTuning();
 </script>
 </body>
 </html>

@@ -688,7 +688,7 @@ def calculate_arb(kalshi_price: float, espn_prob: float,
                   edge_threshold: float = 0.05) -> Optional[dict]:
     """Determine if an arbitrage opportunity exists.
 
-    Strategy D: only flag YES opportunities where entry < $0.50.
+    Only flag YES opportunities where entry < $0.50.
     """
     edge = espn_prob - kalshi_price
 
@@ -702,7 +702,7 @@ def calculate_arb(kalshi_price: float, espn_prob: float,
 
     if edge <= -edge_threshold:
         logger.debug(
-            "Potential NO arb (skipped per Strategy D): edge=%.4f, kalshi=%.2f, espn=%.4f",
+            "Potential NO arb (skipped, YES-only): edge=%.4f, kalshi=%.2f, espn=%.4f",
             edge, kalshi_price, espn_prob,
         )
 

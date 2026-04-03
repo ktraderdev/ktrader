@@ -24,10 +24,34 @@ from llm_client import llm_client
 from trade_journal import journal
 from position_manager import PositionManager
 
+import json as _json
+
 try:
     from data_enrichment import enrich_market
 except ImportError:
     enrich_market = lambda m: ''
+
+# ── Tuning ────────────────────────────────────────────────────────
+
+_TUNING_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "tuning.json")
+_TUNING_DEFAULTS = {
+    "category_weights": {},
+    "min_confidence": "low",
+    "max_entry_price": 0.65,
+    "category_exposure_limit": 3.00,
+    "crowd_weight": 1.0,
+    "side_policy": "yes_only",
+}
+
+def load_tuning() -> dict:
+    """Load tuning overrides. Re-read each cycle for hot reload."""
+    try:
+        if os.path.exists(_TUNING_PATH):
+            with open(_TUNING_PATH) as f:
+                return _json.load(f)
+    except Exception:
+        pass
+    return dict(_TUNING_DEFAULTS)
 
 try:
     from sports_scanner import scan_sports_arb
@@ -123,6 +147,9 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
     """Run one scan → analyze → trade cycle. Returns stats."""
     stats = {"scanned": 0, "analyzed": 0, "traded": 0, "errors": 0,
              "exits": 0}
+
+    # Load tuning overrides (hot-reloaded each cycle)
+    tuning = load_tuning()
 
     # 0a. Resolve any settled markets first (record actual P&L)
     try:
@@ -264,8 +291,11 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
             if config.llm.use_dual_analysis:
                 logger.info("  Running dual analysis (Qwen + Claude)...")
                 crowd_text = ""
-                if _collective_client and ticker in crowd_signals:
+                _cw = tuning.get("crowd_weight", 1.0)
+                if _collective_client and ticker in crowd_signals and _cw > 0:
                     crowd_text = _collective_client.format_crowd_text(crowd_signals[ticker])
+                    if _cw != 1.0:
+                        crowd_text += f"\n(Crowd signal weight: {_cw}x — {'discount' if _cw < 1 else 'amplify'} accordingly)"
                 arbiter = llm_client.analyze_dual(market, market_context, calibration_text, active_traces, crowd_text)
                 if arbiter:
                     prob = arbiter.get("final_probability", arbiter.get("probability", "?"))
@@ -314,8 +344,11 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
                 # Single informed prompt — skip multi-agent pipeline
                 logger.info("  Running single-agent analysis (Claude)...")
                 crowd_text = ""
-                if _collective_client and ticker in crowd_signals:
+                _cw = tuning.get("crowd_weight", 1.0)
+                if _collective_client and ticker in crowd_signals and _cw > 0:
                     crowd_text = _collective_client.format_crowd_text(crowd_signals[ticker])
+                    if _cw != 1.0:
+                        crowd_text += f"\n(Crowd signal weight: {_cw}x — {'discount' if _cw < 1 else 'amplify'} accordingly)"
                 arbiter = llm_client.analyze_single(market, market_context, calibration_text, active_traces, crowd_text)
                 if not arbiter:
                     logger.warning(f"  Single-agent analysis failed for {ticker}")
@@ -412,16 +445,38 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
                     f"[via {arbiter.get('arbiter_source', '?')}]"
                 )
 
-            # 5a. Confidence gate: skip low-confidence trades
-            if arbiter.get("confidence") == "low":
-                logger.info("  Low confidence — skipping")
+            # 5a. Confidence gate (tunable)
+            _conf_levels = {"low": 0, "medium": 1, "high": 2}
+            _min_conf = tuning.get("min_confidence", "low")
+            _arb_conf = arbiter.get("confidence", "low")
+            if _conf_levels.get(_arb_conf, 0) < _conf_levels.get(_min_conf, 0):
+                logger.info(f"  Confidence {_arb_conf} below minimum {_min_conf} — skipping")
+                continue
+
+            # 5b. Category weight gate (tunable)
+            _trade_cat = (market.get("_category") or market.get("category", "")).lower()
+            _cat_weight = tuning.get("category_weights", {}).get(_trade_cat, 1.0)
+            if _cat_weight <= 0:
+                logger.info(f"  Category {_trade_cat} weight is 0 — skipping")
                 continue
 
             # 5. Execute trade if recommended
-            if arbiter.get("trade") and arbiter.get("side") == "yes":
-                # Strategy D: YES only. NO trades had 0/40 win rate.
+            _side_ok = arbiter.get("side") == "yes" or (
+                tuning.get("side_policy", "yes_only") == "both" and arbiter.get("side") == "no"
+            )
+            if arbiter.get("trade") and _side_ok:
                 side = arbiter["side"]
                 edge = float(arbiter.get("edge", 0))
+
+                # Category weight: >1 requires proportionally more edge
+                if _cat_weight > 1.0:
+                    _required_edge = config.trading.min_edge * _cat_weight
+                    if edge < _required_edge:
+                        logger.info(
+                            f"  Edge {edge:.3f} below weighted minimum "
+                            f"{_required_edge:.3f} (weight {_cat_weight}x) — skipping"
+                        )
+                        continue
 
                 # Kelly criterion position sizing
                 yes_price = scanner._get_yes_price(market)
@@ -447,20 +502,21 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
                         logger.info(f"  Bet too small (${bet_amount:.2f}) — skipping")
                         continue
 
-                    # Strategy D: Cap entry at $0.65 — data showed mid-range entries outperform cheap ones
-                    if price > 0.65:
-                        logger.info(f"  Entry price ${price:.2f} too high (max $0.65) — skipping")
+                    _max_entry = tuning.get("max_entry_price", 0.65)
+                    if price > _max_entry:
+                        logger.info(f"  Entry price ${price:.2f} too high (max ${_max_entry:.2f}) — skipping")
                         continue
 
-                    # Category exposure limit check
+                    # Category exposure limit (tunable)
+                    _cat_exp_limit = tuning.get("category_exposure_limit", 3.00)
                     trade_category = market.get("_category") or market.get("_event_category")
                     if trade_category:
                         cat_exposure = journal.get_category_exposure()
                         current_cat_exp = cat_exposure.get(trade_category, 0.0)
-                        if current_cat_exp > 3.00:
+                        if current_cat_exp > _cat_exp_limit:
                             logger.info(
                                 f"  Category exposure limit reached: "
-                                f"{trade_category} = ${current_cat_exp:.2f} (limit $3.00) — skipping"
+                                f"{trade_category} = ${current_cat_exp:.2f} (limit ${_cat_exp_limit:.2f}) — skipping"
                             )
                             continue
 

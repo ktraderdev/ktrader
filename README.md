@@ -9,12 +9,12 @@ Scan Kalshi markets
     -> Enrich with real-time data (yfinance, FRED, NWS weather, ESPN odds)
     -> Multi-model AI consensus (Qwen local + Claude + Grok + OpenAI)
     -> Trade if majority agrees with sufficient edge
-    -> Hold to settlement (Strategy D)
+    -> Hold to settlement
     -> Calibrate: feed outcomes back into future prompts
     -> Repeat
 ```
 
-**Strategy D**: YES-only trades, entry under $0.65, hold to settlement. Backtested across 4 strategy variants. Stop-losses destroy value in binary prediction markets ($1 or $0 payout) -- mid-market fluctuations are noise.
+**Hold to settlement**: YES-only trades, entry under $0.65, hold to settlement. Stop-losses destroy value in binary prediction markets ($1 or $0 payout) -- mid-market fluctuations are noise.
 
 **Multi-model consensus**: Qwen screens locally for free. If potential edge detected, Claude + Grok + OpenAI vote. Majority must agree on side, probabilities must be within 20%. Cuts cloud API costs ~80%.
 
@@ -67,7 +67,7 @@ main.py              -- Orchestrator: scan -> analyze -> trade loop
 llm_client.py        -- Multi-model LLM client (Qwen/Claude/Grok/OpenAI)
 scanner.py           -- Kalshi market scanner with filters
 data_enrichment.py   -- Real-time data from yfinance, FRED, NWS, etc.
-position_manager.py  -- Settlement resolution, exit rules (disabled for Strategy D)
+position_manager.py  -- Settlement resolution, exit rules
 trade_journal.py     -- SQLite persistence: scans, analyses, trades, exits
 config.py            -- Configuration dataclasses from .env
 sports_scanner.py    -- ESPN/DraftKings odds -> Kalshi arbitrage

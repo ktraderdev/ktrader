@@ -1,0 +1,18 @@
+{
+  "category_weights": {
+    "climate": 1.0,
+    "economics": 1.0,
+    "financials": 1.0,
+    "politics": 1.0,
+    "science": 1.0,
+    "health": 1.0,
+    "entertainment": 1.0,
+    "sports": 1.0,
+    "world": 1.0
+  },
+  "min_confidence": "low",
+  "max_entry_price": 0.65,
+  "category_exposure_limit": 3.0,
+  "crowd_weight": 1.0,
+  "side_policy": "yes_only"
+}

@@ -280,7 +280,7 @@ function fmtTime(ts) {
 
 async function loadCalibration() {
   const data = await fetchJSON('/calibration');
-  const cal = data.qwen || data.claude || {};
+  const cal = data.qwen || data.claude || data.demo || {};
 
   if (!cal.n) {
     document.getElementById('c-total').textContent = '0';
