@@ -47,8 +47,8 @@ class KalshiConfig:
 class LLMConfig:
     """LM Studio / local LLM configuration."""
     # Mac Mini M4 running LM Studio (ethernet primary, WiFi fallback)
-    endpoint: str = os.environ.get("LLM_ENDPOINT", "http://192.168.1.238:1234/v1")
-    endpoint_fallback: str = os.environ.get("LLM_ENDPOINT_FALLBACK", "http://192.168.1.21:1234/v1")
+    endpoint: str = os.environ.get("LLM_ENDPOINT", "")
+    endpoint_fallback: str = os.environ.get("LLM_ENDPOINT_FALLBACK", "")
     model: str = os.environ.get("LLM_MODEL", "qwen3.5-9b")
     temperature: float = float(os.environ.get("LLM_TEMPERATURE", "0.3"))
     max_tokens: int = int(os.environ.get("LLM_MAX_TOKENS", "1024"))
@@ -114,6 +114,22 @@ class SportsConfig:
     odds_api_key: str = os.environ.get("ODDS_API_KEY", "")
 
 
+
+@dataclass
+class CollectiveConfig:
+    """Collective intelligence layer configuration."""
+    enabled: bool = os.environ.get("COLLECTIVE_ENABLED", "false").lower() == "true"
+    server_url: str = os.environ.get("COLLECTIVE_SERVER", "https://ktrader.dev/collective")
+    api_key: str = os.environ.get("COLLECTIVE_API_KEY", "")
+
+    @property
+    def instance_id(self) -> str:
+        """Stable anonymous identifier derived from Kalshi API key."""
+        import hashlib
+        key = os.environ.get("KALSHI_API_KEY_ID", "anonymous")
+        return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
 @dataclass
 class Config:
     """Master configuration."""
@@ -122,6 +138,7 @@ class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     trading: TradingConfig = field(default_factory=TradingConfig)
     sports: SportsConfig = field(default_factory=SportsConfig)
+    collective: CollectiveConfig = field(default_factory=CollectiveConfig)
     db_path: str = os.environ.get("DB_PATH", "trade_journal.db")
     log_level: str = os.environ.get("LOG_LEVEL", "INFO")
 

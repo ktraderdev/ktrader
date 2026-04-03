@@ -1,2 +1,17 @@
+# Core
 requests>=2.31.0
 cryptography>=42.0.0
+
+# Dashboard
+flask>=3.0
+
+# Data enrichment
+yfinance>=0.2.36
+fredapi>=0.5.1
+
+# Collective server (only needed if hosting the central server)
+fastapi>=0.110
+uvicorn>=0.27
+
+# Optional: local weather (free tier)
+# openweathermap requires API key, NWS is used as primary (no key needed)

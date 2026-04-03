@@ -9,6 +9,7 @@ Usage:
     python main.py --status     # Show portfolio + open trades
     python main.py --test-llm   # Test LM Studio connection
 """
+import os
 import sys
 import time
 import signal
@@ -34,6 +35,19 @@ try:
     _sports_available = True
 except ImportError:
     _sports_available = False
+
+# Collective intelligence (opt-in)
+_collective_client = None
+if config.collective.enabled and config.collective.api_key:
+    try:
+        from collective.client import CollectiveClient
+        _collective_client = CollectiveClient(
+            server_url=config.collective.server_url,
+            api_key=config.collective.api_key,
+            instance_id=config.collective.instance_id,
+        )
+    except ImportError:
+        pass
 
 
 def _fetch_market_context(client, market: dict) -> str:
@@ -84,7 +98,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("/opt/kalshi-trader/kalshi_trader.log"),
+        logging.FileHandler(os.path.join(os.path.dirname(os.path.abspath(__file__)), "kalshi_trader.log")),
     ],
 )
 logger = logging.getLogger("kalshi-trader")
@@ -112,7 +126,7 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
 
     # 0a. Resolve any settled markets first (record actual P&L)
     try:
-        settled = pos_manager.resolve_settlements()
+        settled = pos_manager.resolve_settlements(collective_client=_collective_client)
         if settled > 0:
             logger.info(f"Resolved {settled} settled market(s)")
     except Exception as e:
@@ -138,7 +152,17 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
     except Exception as e:
         logger.debug(f"Trade traces fetch failed: {e}")
 
-    # 0d. Get current prompt variant
+    # 0d. Fetch crowd signals from collective
+    crowd_signals = {}
+    if _collective_client:
+        try:
+            crowd_signals = _collective_client.get_active_crowds()
+            if crowd_signals:
+                logger.debug(f"Crowd signals loaded for {len(crowd_signals)} tickers")
+        except Exception as e:
+            logger.debug(f"Crowd signal fetch failed: {e}")
+
+    # 0e. Get current prompt variant
     variant_name, variant_cfg = llm_client.next_variant()
     inject_traces = variant_cfg.get("inject_traces", False)
     active_traces = trade_traces if inject_traces else ""
@@ -239,7 +263,10 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
 
             if config.llm.use_dual_analysis:
                 logger.info("  Running dual analysis (Qwen + Claude)...")
-                arbiter = llm_client.analyze_dual(market, market_context, calibration_text, active_traces)
+                crowd_text = ""
+                if _collective_client and ticker in crowd_signals:
+                    crowd_text = _collective_client.format_crowd_text(crowd_signals[ticker])
+                arbiter = llm_client.analyze_dual(market, market_context, calibration_text, active_traces, crowd_text)
                 if arbiter:
                     prob = arbiter.get("final_probability", arbiter.get("probability", "?"))
                     logger.info(
@@ -247,6 +274,21 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
                         f"trade={arbiter.get('trade', False)} side={arbiter.get('side', 'none')} "
                         f"[{arbiter.get('arbiter_source', '?')}]"
                     )
+                    # Submit to collective (fire-and-forget)
+                    if _collective_client:
+                        try:
+                            _collective_client.submit_signal(
+                                ticker=ticker,
+                                predicted_prob=float(arbiter.get("final_probability", arbiter.get("probability", 0.5))),
+                                side=arbiter.get("side", "none"),
+                                confidence=arbiter.get("confidence", "low"),
+                                model_source=arbiter.get("arbiter_source", "unknown"),
+                                market_price=float(market.get("yes_bid_dollars", 0.5)),
+                                category=market.get("_category", ""),
+                            )
+                        except Exception:
+                            pass
+
                     if not arbiter.get("trade"):
                         # Log the analysis even if no trade
                         scan_id = journal.log_scan(market, {"probability": prob, "confidence": arbiter.get("confidence", "low"), "reasoning": arbiter.get("reasoning", "")}, False)
@@ -271,7 +313,10 @@ def run_cycle(client: KalshiClient, scanner: MarketScanner,
             elif config.llm.use_single_agent:
                 # Single informed prompt — skip multi-agent pipeline
                 logger.info("  Running single-agent analysis (Claude)...")
-                arbiter = llm_client.analyze_single(market, market_context, calibration_text, active_traces)
+                crowd_text = ""
+                if _collective_client and ticker in crowd_signals:
+                    crowd_text = _collective_client.format_crowd_text(crowd_signals[ticker])
+                arbiter = llm_client.analyze_single(market, market_context, calibration_text, active_traces, crowd_text)
                 if not arbiter:
                     logger.warning(f"  Single-agent analysis failed for {ticker}")
                     stats["errors"] += 1

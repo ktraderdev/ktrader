@@ -353,7 +353,8 @@ Should we trade?"""
         return None
 
     def analyze_single(self, market_data: dict, context: str = "",
-                       calibration_text: str = "", trade_traces: str = "") -> Optional[dict]:
+                       calibration_text: str = "", trade_traces: str = "",
+                       crowd_text: str = "") -> Optional[dict]:
         """Single-call analysis: estimate probability + trade decision in one prompt."""
         yes_bid = market_data.get('yes_bid_dollars', '?')
         no_bid = market_data.get('no_bid_dollars', '?')
@@ -366,6 +367,8 @@ YOUR TRACK RECORD (use this to adjust your confidence):
 """
         if trade_traces:
             cal_section += f"\n{trade_traces}\n"
+        if crowd_text:
+            cal_section += f"\n{crowd_text}\n"
 
         prompt = f"""You are a prediction market analyst for a trading bot. Analyze this market and decide whether to trade.
 
@@ -414,7 +417,8 @@ Respond ONLY with valid JSON:
         return result
 
     def analyze_dual(self, market_data: dict, context: str = "",
-                     calibration_text: str = "", trade_traces: str = "") -> Optional[dict]:
+                     calibration_text: str = "", trade_traces: str = "",
+                     crowd_text: str = "") -> Optional[dict]:
         """Run both Qwen and Claude on the same market. Only trade if they agree."""
         # Build the prompt (same for both)
         title = market_data.get("title", "?")
@@ -429,6 +433,8 @@ Respond ONLY with valid JSON:
             cal_section = f"\nYOUR TRACK RECORD:\n{calibration_text}\n"
         if trade_traces:
             cal_section += f"\n{trade_traces}\n"
+        if crowd_text:
+            cal_section += f"\n{crowd_text}\n"
 
         prompt = f"""MARKET: {title}
 Ticker: {ticker}

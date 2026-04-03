@@ -6,12 +6,14 @@ import sys
 import re
 import sqlite3
 import os
+from pathlib import Path
 from flask import Flask, jsonify, request
 
-sys.path.insert(0, "/opt/kalshi-trader")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-DB_QWEN = os.environ.get("DB_PATH", "/opt/kalshi-trader/trade_journal.db")
-DB_CLAUDE = os.environ.get("DB_CLAUDE_PATH", "/opt/kalshi-trader/trade_journal_claude.db")
+DB_QWEN = os.environ.get("DB_PATH", str(PROJECT_ROOT / "trade_journal.db"))
+DB_CLAUDE = os.environ.get("DB_CLAUDE_PATH", str(PROJECT_ROOT / "trade_journal_claude.db"))
 
 import time as _time
 import threading
@@ -466,7 +468,7 @@ def position_timeline():
 def calibration():
     """Calibration summary from trade journal."""
     import sys
-    sys.path.insert(0, "/opt/kalshi-trader")
+    sys.path.insert(0, str(PROJECT_ROOT))
     from trade_journal import TradeJournal
 
     results = {}
@@ -506,7 +508,7 @@ def enrichment_test():
     """Test data enrichment on current market candidates. Cached for 5 minutes."""
     def _compute():
         import sys
-        sys.path.insert(0, "/opt/kalshi-trader")
+        sys.path.insert(0, str(PROJECT_ROOT))
         from data_enrichment import enrich_market
         from kalshi_client import KalshiClient
         from scanner import MarketScanner
@@ -563,6 +565,20 @@ def enrichment_test():
 
 
 
+
+@app.route("/api/collective/status")
+def collective_status():
+    """Collective intelligence status."""
+    try:
+        import requests as _requests
+        server = os.environ.get("COLLECTIVE_SERVER", "https://ktrader.dev/collective")
+        resp = _requests.get(f"{server}/collective/v1/members/count", timeout=3)
+        if resp.status_code == 200:
+            return jsonify(resp.json())
+        return jsonify({"error": "Collective server unreachable"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/variants")
 def variant_stats():
     """A/B test variant performance."""
@@ -577,7 +593,7 @@ def sports_arb():
     """Sports arbitrage opportunities. Cached for 2 minutes."""
     def _compute():
         import sys
-        sys.path.insert(0, "/opt/kalshi-trader")
+        sys.path.insert(0, str(PROJECT_ROOT))
         from sports_scanner import scan_sports_arb
         from kalshi_client import KalshiClient
         client = KalshiClient()
@@ -603,4 +619,8 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5100, debug=False)
+    app.run(
+        host=os.environ.get("DASHBOARD_HOST", "127.0.0.1"),
+        port=int(os.environ.get("DASHBOARD_PORT", "5100")),
+        debug=False
+    )

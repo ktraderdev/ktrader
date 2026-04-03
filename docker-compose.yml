@@ -1,0 +1,21 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./kalshi-key.pem:/app/kalshi-key.pem:ro
+    command: python main.py --loop --dry-run
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "${DASHBOARD_PORT:-5100}:5100"
+    environment:
+      - DASHBOARD_HOST=0.0.0.0
+    command: python dashboard/api.py
+    restart: unless-stopped

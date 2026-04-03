@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 def _load_env():
-    env_path = Path("/opt/kalshi-trader/.env")
+    env_path = Path(__file__).resolve().parent / ".env"
     if env_path.exists():
         for line in env_path.read_text().splitlines():
             line = line.strip()

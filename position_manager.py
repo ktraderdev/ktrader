@@ -170,9 +170,10 @@ class PositionManager:
         except (ValueError, TypeError):
             return None
 
-    def resolve_settlements(self) -> int:
+    def resolve_settlements(self, collective_client=None) -> int:
         """Check settled markets and record actual P&L for all unresolved trades
-        (both real trades with status pending/filled AND dry-run trades)."""
+        (both real trades with status pending/filled AND dry-run trades).
+        Optionally submits outcomes to collective."""
         # Get pending/filled trades (real trades)
         open_trades = journal.get_open_trades()
         # Also get unsettled dry-run trades
@@ -209,6 +210,17 @@ class PositionManager:
                     f"SETTLED {ticker}: {trade['side']} {trade['count']}x "
                     f"result={result} pnl=${pnl:+.2f} ({outcome})"
                 )
+                # Submit outcome to collective
+                if collective_client:
+                    try:
+                        # Use trade ID as signal_id fallback
+                        collective_client.submit_outcome(
+                            signal_id=str(trade.get("id", "")),
+                            ticker=ticker,
+                            outcome=outcome,
+                        )
+                    except Exception:
+                        pass
                 resolved += 1
             except Exception as e:
                 logger.debug(f"Settlement check failed for {ticker}: {e}")
