@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ktrader - Setup</title>
+<link rel="icon" type="image/png" href="/logo-1x.png">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: #161616;
+  color: #d0d0d0;
+  line-height: 1.6;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: #8bb4f0; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.wrap { max-width: 640px; margin: 0 auto; padding: 40px 24px 100px; }
+
+nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 48px; }
+nav .mark { font-weight: 600; font-size: 15px; text-decoration: none; color: #fff; }
+nav .links { display: flex; gap: 24px; font-size: 14px; }
+nav .links a { color: #777; }
+nav .links a:hover { color: #fff; }
+
+h1 { font-size: 24px; font-weight: 600; color: #fff; margin-bottom: 8px; letter-spacing: -0.02em; }
+.page-desc { color: #777; margin-bottom: 40px; font-size: 14px; }
+
+.section {
+  margin-bottom: 40px;
+  border: 1px solid #2a2a2a;
+}
+.section-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.section-title { font-size: 14px; font-weight: 500; color: #eee; }
+.section-link { font-size: 12px; color: #777; }
+.section-link a { color: #8bb4f0; }
+
+.fields { padding: 4px 0; }
+
+.field {
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  border-bottom: 1px solid #1e1e1e;
+  gap: 16px;
+}
+.field:last-child { border-bottom: none; }
+
+.field label {
+  width: 220px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  color: #999;
+}
+.field input, .field select {
+  flex: 1;
+  padding: 7px 10px;
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  color: #ddd;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 13px;
+}
+.field input:focus, .field select:focus { outline: none; border-color: #444; }
+.field select { cursor: pointer; }
+.field select option { background: #1c1c1c; }
+
+.field .hint {
+  font-size: 11px;
+  color: #555;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .field { flex-wrap: wrap; gap: 4px; }
+  .field label { width: 100%; }
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 32px;
+}
+.actions button {
+  padding: 10px 28px;
+  background: #eee;
+  color: #111;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.actions button:hover { background: #fff; }
+.actions button:disabled { background: #333; color: #666; cursor: not-allowed; }
+.actions .status { font-size: 13px; color: #666; }
+.actions .status.ok { color: #4ade80; }
+.actions .status.err { color: #f87171; }
+
+.note {
+  margin-top: 24px;
+  padding: 16px 20px;
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  font-size: 13px;
+  color: #777;
+}
+.note strong { color: #ccc; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav>
+  <a class="mark" href="/"><img src="/logo.png" alt="ktrader" style="height:48px;"></a>
+  <div class="links">
+    <a href="/setup" style="color: #fff;">Setup</a>
+    <a href="https://github.com/ktraderdev/ktrader">GitHub</a>
+  </div>
+</nav>
+
+<h1>Configuration</h1>
+<p class="page-desc">API keys and settings are stored in your local .env file. Sensitive values are masked.</p>
+
+<!-- Kalshi -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Kalshi API</span>
+    <span class="section-link"><a href="https://kalshi.com/account/api-keys" target="_blank">Get API key</a></span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>KALSHI_API_KEY_ID</label>
+      <input type="text" data-key="KALSHI_API_KEY_ID" placeholder="your-api-key-id">
+    </div>
+    <div class="field">
+      <label>KALSHI_PRIVATE_KEY_PATH</label>
+      <input type="text" data-key="KALSHI_PRIVATE_KEY_PATH" placeholder="./kalshi-key.pem">
+    </div>
+    <div class="field">
+      <label>KALSHI_USE_DEMO</label>
+      <select data-key="KALSHI_USE_DEMO">
+        <option value="false">false (production)</option>
+        <option value="true">true (demo/sandbox)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Trading -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Trading Parameters</span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>DRY_RUN</label>
+      <select data-key="DRY_RUN">
+        <option value="true">true (paper trade)</option>
+        <option value="false">false (live)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>MAX_BET_AMOUNT</label>
+      <input type="text" data-key="MAX_BET_AMOUNT" placeholder="1.00">
+      <span class="hint">USD</span>
+    </div>
+    <div class="field">
+      <label>MAX_DAILY_LOSS</label>
+      <input type="text" data-key="MAX_DAILY_LOSS" placeholder="5.00">
+      <span class="hint">USD</span>
+    </div>
+    <div class="field">
+      <label>MAX_OPEN_POSITIONS</label>
+      <input type="text" data-key="MAX_OPEN_POSITIONS" placeholder="5">
+    </div>
+    <div class="field">
+      <label>KELLY_FRACTION</label>
+      <input type="text" data-key="KELLY_FRACTION" placeholder="0.25">
+    </div>
+    <div class="field">
+      <label>MIN_EDGE</label>
+      <input type="text" data-key="MIN_EDGE" placeholder="0.10">
+      <span class="hint">probability</span>
+    </div>
+    <div class="field">
+      <label>SCAN_INTERVAL</label>
+      <input type="text" data-key="SCAN_INTERVAL" placeholder="600">
+      <span class="hint">seconds</span>
+    </div>
+    <div class="field">
+      <label>CATEGORIES</label>
+      <input type="text" data-key="CATEGORIES" placeholder="economics,financials,politics,science,climate">
+    </div>
+  </div>
+</div>
+
+<!-- Local LLM -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Local LLM (LM Studio)</span>
+    <span class="section-link"><a href="https://lmstudio.ai/" target="_blank">Download LM Studio</a></span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>LLM_ENDPOINT</label>
+      <input type="text" data-key="LLM_ENDPOINT" placeholder="http://192.168.1.100:1234/v1">
+    </div>
+    <div class="field">
+      <label>LLM_ENDPOINT_FALLBACK</label>
+      <input type="text" data-key="LLM_ENDPOINT_FALLBACK" placeholder="http://192.168.1.101:1234/v1">
+      <span class="hint">optional</span>
+    </div>
+    <div class="field">
+      <label>LLM_MODEL</label>
+      <input type="text" data-key="LLM_MODEL" placeholder="qwen2.5-14b-instruct">
+    </div>
+    <div class="field">
+      <label>LLM_TEMPERATURE</label>
+      <input type="text" data-key="LLM_TEMPERATURE" placeholder="0.3">
+    </div>
+    <div class="field">
+      <label>LLM_MAX_TOKENS</label>
+      <input type="text" data-key="LLM_MAX_TOKENS" placeholder="1024">
+    </div>
+  </div>
+</div>
+
+<!-- Cloud LLMs -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Cloud LLM APIs</span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>ANTHROPIC_API_KEY</label>
+      <input type="password" data-key="ANTHROPIC_API_KEY" placeholder="sk-ant-...">
+      <span class="hint"><a href="https://console.anthropic.com/settings/keys" target="_blank">get key</a></span>
+    </div>
+    <div class="field">
+      <label>CLAUDE_MODEL</label>
+      <input type="text" data-key="CLAUDE_MODEL" placeholder="claude-sonnet-4-20250514">
+    </div>
+    <div class="field">
+      <label>XAI_API_KEY</label>
+      <input type="password" data-key="XAI_API_KEY" placeholder="xai-...">
+      <span class="hint"><a href="https://console.x.ai/" target="_blank">get key</a></span>
+    </div>
+    <div class="field">
+      <label>OPENAI_API_KEY</label>
+      <input type="password" data-key="OPENAI_API_KEY" placeholder="sk-...">
+      <span class="hint"><a href="https://platform.openai.com/api-keys" target="_blank">get key</a></span>
+    </div>
+    <div class="field">
+      <label>USE_DUAL_ANALYSIS</label>
+      <select data-key="USE_DUAL_ANALYSIS">
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Data Enrichment -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Data Enrichment</span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>FRED_API_KEY</label>
+      <input type="password" data-key="FRED_API_KEY" placeholder="your-fred-key">
+      <span class="hint"><a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank">free key</a></span>
+    </div>
+    <div class="field">
+      <label>OPENWEATHER_API_KEY</label>
+      <input type="password" data-key="OPENWEATHER_API_KEY" placeholder="your-openweather-key">
+      <span class="hint"><a href="https://openweathermap.org/appid" target="_blank">free key</a></span>
+    </div>
+  </div>
+</div>
+
+<!-- Sports -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Sports Arbitrage</span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>SPORTS_ENABLED</label>
+      <select data-key="SPORTS_ENABLED">
+        <option value="false">false</option>
+        <option value="true">true</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>SPORTS_SCAN_INTERVAL</label>
+      <input type="text" data-key="SPORTS_SCAN_INTERVAL" placeholder="30">
+      <span class="hint">seconds</span>
+    </div>
+  </div>
+</div>
+
+<!-- Collective -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Collective Intelligence</span>
+    <span class="section-link"><a href="/">join</a></span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>COLLECTIVE_ENABLED</label>
+      <select data-key="COLLECTIVE_ENABLED">
+        <option value="false">false</option>
+        <option value="true">true</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>COLLECTIVE_SERVER</label>
+      <input type="text" data-key="COLLECTIVE_SERVER" placeholder="https://ktrader.dev/collective">
+    </div>
+    <div class="field">
+      <label>COLLECTIVE_API_KEY</label>
+      <input type="password" data-key="COLLECTIVE_API_KEY" placeholder="your-collective-key">
+    </div>
+  </div>
+</div>
+
+<!-- System -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">System</span>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>DB_PATH</label>
+      <input type="text" data-key="DB_PATH" placeholder="trade_journal.db">
+    </div>
+    <div class="field">
+      <label>LOG_LEVEL</label>
+      <select data-key="LOG_LEVEL">
+        <option value="INFO">INFO</option>
+        <option value="DEBUG">DEBUG</option>
+        <option value="WARNING">WARNING</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>DASHBOARD_HOST</label>
+      <input type="text" data-key="DASHBOARD_HOST" placeholder="127.0.0.1">
+    </div>
+    <div class="field">
+      <label>DASHBOARD_PORT</label>
+      <input type="text" data-key="DASHBOARD_PORT" placeholder="5100">
+    </div>
+  </div>
+</div>
+
+<div class="actions">
+  <button onclick="save()">Save</button>
+  <span class="status" id="status"></span>
+</div>
+
+<div class="note">
+  <strong>Note:</strong> Changes are saved to your local .env file. The bot must be restarted for changes to take effect. Sensitive keys are masked after saving -- submitting a masked value leaves the original unchanged.
+</div>
+
+</div>
+
+<script>
+async function load() {
+  try {
+    const r = await fetch('/api/config');
+    const d = await r.json();
+    if (!d.config) return;
+    for (const [key, val] of Object.entries(d.config)) {
+      const el = document.querySelector(`[data-key="${key}"]`);
+      if (el) {
+        if (el.tagName === 'SELECT') {
+          el.value = val;
+        } else {
+          el.value = val;
+        }
+      }
+    }
+  } catch(e) {
+    document.getElementById('status').textContent = 'Failed to load config';
+    document.getElementById('status').className = 'status err';
+  }
+}
+
+async function save() {
+  const config = {};
+  document.querySelectorAll('[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    const val = el.value.trim();
+    if (val) config[key] = val;
+  });
+
+  const status = document.getElementById('status');
+  status.textContent = 'Saving...';
+  status.className = 'status';
+
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({config})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      status.textContent = 'Saved. Restart bot to apply.';
+      status.className = 'status ok';
+      load(); // reload masked values
+    } else {
+      status.textContent = d.error || 'Save failed';
+      status.className = 'status err';
+    }
+  } catch(e) {
+    status.textContent = e.message;
+    status.className = 'status err';
+  }
+}
+
+load();
+</script>
+</body>
+</html>

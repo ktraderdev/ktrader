@@ -25,7 +25,7 @@ Scan Kalshi markets
 ### Docker
 
 ```bash
-git clone https://github.com/bokelleher/ktrader.git
+git clone https://github.com/ktraderdev/ktrader.git
 cd ktrader
 cp .env.template .env
 # Edit .env: add your Kalshi API key + at least one LLM API key
@@ -36,7 +36,7 @@ docker-compose up -d
 ### Bare Metal
 
 ```bash
-git clone https://github.com/bokelleher/ktrader.git
+git clone https://github.com/ktraderdev/ktrader.git
 cd ktrader
 pip install -r requirements.txt
 cp .env.template .env
