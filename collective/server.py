@@ -272,7 +272,6 @@ def member_count():
 @app.post("/collective/v1/admin/register")
 def register_member(
     api_key: str,
-    kalshi_key_id: str,
     admin_secret: str = Header(...)
 ):
     """Admin-only: register a new member. Requires COLLECTIVE_ADMIN_SECRET header."""
@@ -286,7 +285,7 @@ def register_member(
             raise HTTPException(status_code=403, detail=f"Membership capped at {MEMBER_CAP}")
 
         key_hash = hash_key(api_key)
-        instance_id = hashlib.sha256(kalshi_key_id.encode()).hexdigest()[:16]
+        instance_id = key_hash[:16]
 
         try:
             db.execute(
@@ -297,6 +296,33 @@ def register_member(
             raise HTTPException(status_code=409, detail="Member already registered")
 
     return {"status": "registered", "instance_id": instance_id}
+
+
+# ── Self-service join ─────────────────────────────────────────
+
+class JoinRequest(BaseModel):
+    api_key: str = Field(..., min_length=16, description="Collective API key (you choose)")
+
+@app.post("/collective/v1/join")
+def join_collective(req: JoinRequest):
+    """Public self-service: join the collective. Membership is capped."""
+    with get_db() as db:
+        count = db.execute("SELECT COUNT(*) FROM members WHERE is_active = 1").fetchone()[0]
+        if count >= MEMBER_CAP:
+            raise HTTPException(status_code=403, detail=f"Membership is full ({MEMBER_CAP}/{MEMBER_CAP})")
+
+        key_hash = hash_key(req.api_key)
+        instance_id = key_hash[:16]
+
+        try:
+            db.execute(
+                "INSERT INTO members (api_key_hash, instance_id) VALUES (?, ?)",
+                (key_hash, instance_id)
+            )
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Already registered")
+
+    return {"status": "registered", "instance_id": instance_id, "members": count + 1, "cap": MEMBER_CAP}
 
 
 if __name__ == "__main__":

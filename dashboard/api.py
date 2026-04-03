@@ -608,14 +608,97 @@ def sports_arb():
         return jsonify({"opportunities": [], "count": 0, "error": str(e)})
 
 
-@app.route("/calibration")
+@app.route("/api/config")
+def get_config():
+    """Read current .env config, masking secrets."""
+    env_path = PROJECT_ROOT / ".env"
+    config = {}
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip("'\"")
+                config[key] = value
+    # Mask sensitive values for display
+    masked = {}
+    secret_keys = {"KALSHI_API_KEY_ID", "ANTHROPIC_API_KEY", "XAI_API_KEY",
+                   "OPENAI_API_KEY", "FRED_API_KEY", "OPENWEATHER_API_KEY",
+                   "COLLECTIVE_API_KEY", "ODDS_API_KEY"}
+    for k, v in config.items():
+        if k in secret_keys and v and len(v) > 8:
+            masked[k] = v[:4] + "*" * (len(v) - 8) + v[-4:]
+        else:
+            masked[k] = v
+    return jsonify({"config": masked, "has_env": env_path.exists()})
+
+
+@app.route("/api/config", methods=["POST"])
+def save_config():
+    """Save config values to .env file."""
+    data = request.get_json()
+    if not data or "config" not in data:
+        return jsonify({"error": "Missing config"}), 400
+
+    env_path = PROJECT_ROOT / ".env"
+    template_path = PROJECT_ROOT / ".env.template"
+
+    # Read existing .env or template as base
+    existing_lines = []
+    if env_path.exists():
+        existing_lines = env_path.read_text().splitlines()
+    elif template_path.exists():
+        existing_lines = template_path.read_text().splitlines()
+
+    updates = data["config"]
+    updated_keys = set()
+    new_lines = []
+
+    for line in existing_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                # Skip masked values (don't overwrite with masked string)
+                val = updates[key]
+                if "*" * 4 not in val:
+                    new_lines.append(f"{key}={val}")
+                else:
+                    new_lines.append(line)  # keep original
+                updated_keys.add(key)
+                continue
+        new_lines.append(line)
+
+    # Append any new keys not in the file
+    for key, val in updates.items():
+        if key not in updated_keys and "*" * 4 not in val:
+            new_lines.append(f"{key}={val}")
+
+    env_path.write_text("\n".join(new_lines) + "\n")
+    return jsonify({"status": "saved"})
+
+
+@app.route("/dashboard/calibration")
 def calibration_page():
     return app.send_static_file("calibration.html")
 
 
-@app.route("/")
-def index():
+@app.route("/dashboard")
+def dashboard():
     return app.send_static_file("index.html")
+
+
+@app.route("/setup")
+def setup_page():
+    return app.send_static_file("setup.html")
+
+
+@app.route("/")
+def landing():
+    return app.send_static_file("landing.html")
 
 
 if __name__ == "__main__":

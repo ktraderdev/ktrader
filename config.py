@@ -124,10 +124,9 @@ class CollectiveConfig:
 
     @property
     def instance_id(self) -> str:
-        """Stable anonymous identifier derived from Kalshi API key."""
+        """Stable anonymous identifier derived from collective API key."""
         import hashlib
-        key = os.environ.get("KALSHI_API_KEY_ID", "anonymous")
-        return hashlib.sha256(key.encode()).hexdigest()[:16]
+        return hashlib.sha256(self.api_key.encode()).hexdigest()[:16]
 
 
 @dataclass
