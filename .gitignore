@@ -1,0 +1,45 @@
+# Secrets & credentials — NEVER commit
+.env
+.env.*
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+
+# Databases — contain trade history and PII
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Archives
+*.zip
+*.tar.gz
+
+# Claude Code local config
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Deploy scripts (may contain hostnames/IPs)
+deploy_to_*.sh
+
+# Backup files
+*.bak

@@ -1,0 +1,610 @@
+<!-- v1775080948 -->
+<!-- v1775075588 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibration & Data Enrichment</title>
+<style>
+:root {
+  --bg: #0c0f1a; --surface: #141828; --border: #252a40;
+  --text: #d4d8f0; --dim: #7a7fa0;
+  --green: #34d399; --red: #f87171; --blue: #818cf8;
+  --amber: #fbbf24; --purple: #c084fc;
+  --accent: #818cf8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg); color: var(--text);
+  padding: 24px 32px; max-width: 1400px; margin: 0 auto;
+  background-image: radial-gradient(circle at 20% 50%, rgba(99,102,241,0.04) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 20%, rgba(168,85,247,0.03) 0%, transparent 50%);
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; color: #a5b4fc; }
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 24px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+h1 { font-size: 1.4em; font-weight: 700; letter-spacing: -0.02em; }
+.subtitle { color: var(--dim); font-size: 0.82em; margin-top: 4px; font-weight: 400; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px;
+}
+.card-label { font-size: 0.75em; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.card-value { font-size: 1.5em; font-weight: 800; letter-spacing: -0.03em; }
+.positive { color: var(--green); } .negative { color: var(--red); } .neutral { color: var(--dim); }
+.section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.section-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 0.9em; letter-spacing: 0.01em;
+  background: linear-gradient(135deg, rgba(129,140,248,0.06), rgba(192,132,252,0.04));
+}
+.section-body { padding: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+th {
+  text-align: left; padding: 10px 14px; color: var(--accent); font-weight: 600;
+  font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border);
+}
+td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: none; }
+tr:hover { background: rgba(129,140,248,0.06); }
+.chart-container { padding: 16px; position: relative; }
+canvas { width: 100%; height: 100%; }
+.bar-container { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.bar-label { width: 60px; text-align: right; font-size: 0.85em; color: var(--dim); }
+.bar-bg { flex: 1; height: 28px; background: rgba(0,0,0,0.3); border-radius: 6px; overflow: hidden; position: relative; border: 1px solid var(--border); }
+.bar-fill { height: 100%; border-radius: 5px; display: flex; align-items: center; padding: 0 10px; font-size: 0.8em; font-weight: 700; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.bar-ideal { position: absolute; height: 100%; width: 2px; background: var(--amber); top: 0; z-index: 1; }
+.bar-value { width: 70px; font-size: 0.85em; }
+.side-yes { color: var(--green); font-weight: 600; }
+.side-no { color: var(--red); font-weight: 600; }
+.enriched { color: var(--green); } .not-enriched { color: var(--dim); }
+.tag { display: inline-block; font-size: 0.7em; padding: 1px 6px; border-radius: 3px; font-weight: 700; }
+.tag-yes { background: rgba(34,197,94,0.15); color: var(--green); }
+.tag-no { background: rgba(239,68,68,0.15); color: var(--red); }
+.tag-enriched { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+.tag-none { background: rgba(139,143,163,0.1); color: var(--dim); border: 1px dashed var(--dim); }
+.pagination { display: flex; gap: 4px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border); justify-content: center; }
+.page-btn { background: var(--bg); border: 1px solid var(--border); color: var(--dim); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.8em; }
+.page-btn:hover { border-color: var(--accent); color: var(--text); }
+.page-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.page-info { color: var(--dim); font-size: 0.8em; margin: 0 8px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } .cards { grid-template-columns: repeat(2, 1fr); } }
+.pred-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.82em; align-items: center; }
+.pred-row:last-child { border-bottom: none; }
+.pred-ticker { color: var(--blue); min-width: 200px; }
+.pred-prob { min-width: 50px; text-align: center; }
+.pred-outcome { min-width: 60px; text-align: center; font-weight: 600; }
+.pred-pnl { min-width: 60px; text-align: right; }
+.pred-reasoning { color: var(--dim); font-size: 0.9em; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<div style="height:3px;background:linear-gradient(90deg,var(--accent),var(--purple),var(--amber));margin:-24px -32px 20px;border-radius:0 0 2px 2px"></div>
+
+<div class="header">
+  <div>
+    <h1>Calibration & Data Enrichment</h1>
+    <div class="subtitle"><a href="/" style="color:var(--accent);border:1px solid var(--accent);padding:3px 10px;border-radius:4px">Home</a> | Last updated: <span id="updated">loading...</span></div>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Resolved Trades</div>
+    <div class="card-value" id="c-total">--</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Win Rate</div>
+    <div class="card-value" id="c-winrate">--</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Brier Score</div>
+    <div class="card-value" id="c-brier">--</div>
+  </div>
+  <div class="card">
+    <div class="card-label">YES Win Rate</div>
+    <div class="card-value" id="c-yes-wr">--</div>
+  </div>
+  <div class="card">
+    <div class="card-label">NO Win Rate</div>
+    <div class="card-value" id="c-no-wr">--</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Enrichment Rate</div>
+    <div class="card-value" id="c-enrich">--</div>
+  </div>
+</div>
+
+<div class="grid-2">
+
+  <!-- Calibration Chart -->
+  <div class="section">
+    <div class="section-header">Probability Calibration (Predicted vs Actual)</div>
+    <div class="section-body" id="cal-chart">
+      <div style="color:var(--dim);font-size:0.85em;margin-bottom:12px">
+        Each bar shows: when the model predicts X% YES, how often does YES actually happen?
+        <span style="color:var(--amber)">Gold line</span> = perfect calibration.
+      </div>
+      <div id="cal-bars">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Side Performance -->
+  <div class="section">
+    <div class="section-header">Performance by Side</div>
+    <div class="section-body">
+      <table>
+        <thead><tr><th>Side</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>P&L</th></tr></thead>
+        <tbody id="side-body"><tr><td colspan="5" style="color:var(--dim)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Confidence Performance -->
+  <div class="section">
+    <div class="section-header">Performance by Confidence Level</div>
+    <div class="section-body">
+      <table>
+        <thead><tr><th>Confidence</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>P&L</th></tr></thead>
+        <tbody id="conf-body"><tr><td colspan="5" style="color:var(--dim)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Category Performance -->
+  <div class="section">
+    <div class="section-header">Performance by Category</div>
+    <div class="section-body">
+      <table>
+        <thead><tr><th>Category</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>P&L</th></tr></thead>
+        <tbody id="cat-body"><tr><td colspan="5" style="color:var(--dim)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Data Enrichment -->
+<div class="section">
+  <div class="section-header">Data Enrichment Coverage</div>
+  <div class="section-body">
+    <div id="enrich-summary" style="margin-bottom:12px;color:var(--dim);font-size:0.85em">Loading enrichment data...</div>
+    <table>
+      <thead><tr><th>Market</th><th>Category</th><th>YES Price</th><th>Enrichment Data</th><th>Status</th></tr></thead>
+      <tbody id="enrich-body"><tr><td colspan="5" style="color:var(--dim)">Loading...</td></tr></tbody>
+    </table>
+  </div>
+  <div id="enrich-pagination" class="pagination"></div>
+</div>
+
+
+<!-- Sports Arbitrage Scanner -->
+<div class="section">
+  <div class="section-header">
+    Sports Arbitrage Scanner
+    <span id="sports-badge" class="tag" style="margin-left:8px;font-size:0.7em;padding:2px 8px;border-radius:4px;background:rgba(139,143,163,0.15);color:var(--dim)">LOADING</span>
+  </div>
+  <div class="section-body">
+    <div id="sports-summary" style="margin-bottom:12px;color:var(--dim);font-size:0.85em">Loading sports arbitrage data...</div>
+    <table>
+      <thead><tr><th>Sport</th><th>Market</th><th>Kalshi Price</th><th>Vegas Prob</th><th>Edge</th><th>Bookmakers</th><th>Status</th></tr></thead>
+      <tbody id="sports-body"><tr><td colspan="7" style="color:var(--dim)">Loading...</td></tr></tbody>
+    </table>
+  </div>
+  <div id="sports-pagination" class="pagination"></div>
+</div>
+
+<!-- Individual Predictions -->
+<div class="section">
+  <div class="section-header">All Predictions (Most Recent First)</div>
+  <div class="section-body" >
+    <table>
+      <thead><tr>
+        <th>Time</th><th>Market</th><th>Predicted</th><th>Market Price</th>
+        <th>Edge</th><th>Side</th><th>Outcome</th><th>P&L</th><th>Reasoning</th>
+      </tr></thead>
+      <tbody id="preds-body"><tr><td colspan="9" style="color:var(--dim)">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="chart-tooltip" style="position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:0.82em;pointer-events:none;z-index:100;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.4);display:none">
+  <div id="tt-title" style="font-weight:700;margin-bottom:4px;color:var(--text)"></div>
+  <div id="tt-detail" style="color:var(--dim);line-height:1.4"></div>
+</div>
+
+<script>
+const API = '/api';
+const PAGE_SIZE = 30;
+let allEnrichSamples = [];
+let enrichPage = 0;
+let allSportsOpps = [];
+let sportsPage = 0;
+
+function renderPagControls(elId, page, totalItems, setPageFn) {
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const el = document.getElementById(elId);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML =
+    '<button class="page-btn" onclick="' + setPageFn + '(0)">&laquo;</button>' +
+    '<button class="page-btn" onclick="' + setPageFn + '(Math.max(0,' + page + '-1))">&lsaquo;</button>' +
+    '<span class="page-info">Page ' + (page + 1) + ' of ' + totalPages + ' (' + totalItems + ' total)</span>' +
+    '<button class="page-btn" onclick="' + setPageFn + '(Math.min(' + (totalPages - 1) + ',' + page + '+1))">&rsaquo;</button>' +
+    '<button class="page-btn" onclick="' + setPageFn + '(' + (totalPages - 1) + ')">&raquo;</button>';
+}
+
+const _webUrls = {};
+
+function kalshiUrl(ticker) {
+  if (!ticker) return '#';
+  if (_webUrls[ticker]) return _webUrls[ticker];
+  return 'https://kalshi.com/markets';
+}
+
+async function fetchJSON(path, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const r = await fetch(API + path, { credentials: 'same-origin', signal: controller.signal });
+    if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+    return r.json();
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function fmtPct(v) { return v == null ? '--' : (v * 100).toFixed(0) + '%'; }
+function fmtPnl(p) {
+  if (p == null) return '--';
+  const v = parseFloat(p);
+  return (v >= 0 ? '+' : '') + '$' + v.toFixed(2);
+}
+function fmtTime(ts) {
+  if (!ts) return '--';
+  const d = new Date(ts.includes('T') ? ts : ts + 'Z');
+  return d.toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+async function loadCalibration() {
+  const data = await fetchJSON('/calibration');
+  const cal = data.qwen || data.claude || {};
+
+  if (!cal.n) {
+    document.getElementById('c-total').textContent = '0';
+    return;
+  }
+
+  document.getElementById('c-total').textContent = cal.n;
+  document.getElementById('c-brier').textContent = cal.brier.toFixed(3);
+
+  const wrEl = document.getElementById('c-winrate');
+  wrEl.textContent = fmtPct(cal.win_rate);
+  wrEl.className = 'card-value ' + (cal.win_rate > 0.5 ? 'positive' : 'negative');
+
+  const yes = cal.side_stats?.yes || {n:0, wins:0};
+  const no = cal.side_stats?.no || {n:0, wins:0};
+  const yesWr = yes.n ? yes.wins / yes.n : 0;
+  const noWr = no.n ? no.wins / no.n : 0;
+
+  const yesEl = document.getElementById('c-yes-wr');
+  yesEl.textContent = yes.n ? fmtPct(yesWr) + ` (${yes.wins}/${yes.n})` : '--';
+  yesEl.className = 'card-value ' + (yesWr > 0.4 ? 'positive' : yesWr > 0.2 ? 'neutral' : 'negative');
+
+  const noEl = document.getElementById('c-no-wr');
+  noEl.textContent = no.n ? fmtPct(noWr) + ` (${no.wins}/${no.n})` : '--';
+  noEl.className = 'card-value ' + (noWr > 0.4 ? 'positive' : noWr > 0.2 ? 'neutral' : 'negative');
+
+  // Calibration bars
+  const buckets = cal.prob_buckets || {};
+  const sortedBuckets = Object.keys(buckets).map(Number).sort();
+  let html = '';
+  for (const b of sortedBuckets) {
+    const bp = buckets[b];
+    const actualRate = bp.n ? bp.actual_yes / bp.n : 0;
+    const predicted = b;
+    const barWidth = Math.max(actualRate * 100, 2);
+    const idealLeft = predicted * 100;
+    const isOver = actualRate > predicted;
+    const color = Math.abs(actualRate - predicted) < 0.15 ? 'var(--green)'
+      : Math.abs(actualRate - predicted) < 0.3 ? 'var(--amber)' : 'var(--red)';
+
+    html += `<div class="bar-container">
+      <div class="bar-label">${(predicted*100).toFixed(0)}%</div>
+      <div class="bar-bg">
+        <div class="bar-ideal" style="left:${idealLeft}%"></div>
+        <div class="bar-fill" style="width:${barWidth}%;background:${color}">${(actualRate*100).toFixed(0)}%</div>
+      </div>
+      <div class="bar-value">n=${bp.n}</div>
+    </div>`;
+  }
+  document.getElementById('cal-bars').innerHTML = html || '<div style="color:var(--dim)">No data</div>';
+
+  // Side stats table
+  const sideHtml = [['yes', yes], ['no', no]].map(([s, st]) => {
+    const wr = st.n ? (st.wins/st.n*100).toFixed(0) : '--';
+    const pnlClass = (st.pnl||0) > 0 ? 'positive' : (st.pnl||0) < 0 ? 'negative' : '';
+    return `<tr>
+      <td class="side-${s}">${s.toUpperCase()}</td>
+      <td>${st.n}</td><td>${st.wins}</td>
+      <td>${wr}%</td>
+      <td class="${pnlClass}">${fmtPnl(st.pnl)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('side-body').innerHTML = sideHtml;
+
+  // Confidence stats
+  const confStats = cal.conf_stats || {};
+  const confHtml = Object.keys(confStats).sort().map(c => {
+    const st = confStats[c];
+    const wr = st.n ? (st.wins/st.n*100).toFixed(0) : '--';
+    const pnlClass = (st.pnl||0) > 0 ? 'positive' : (st.pnl||0) < 0 ? 'negative' : '';
+    return `<tr><td>${c}</td><td>${st.n}</td><td>${st.wins}</td><td>${wr}%</td><td class="${pnlClass}">${fmtPnl(st.pnl)}</td></tr>`;
+  }).join('');
+  document.getElementById('conf-body').innerHTML = confHtml || '<tr><td colspan="5" style="color:var(--dim)">No data</td></tr>';
+
+  // Category stats
+  const catStats = cal.cat_stats || {};
+  const catHtml = Object.keys(catStats).sort().map(c => {
+    const st = catStats[c];
+    const wr = st.n ? (st.wins/st.n*100).toFixed(0) : '--';
+    const pnlClass = (st.pnl||0) > 0 ? 'positive' : (st.pnl||0) < 0 ? 'negative' : '';
+    return `<tr><td>${c}</td><td>${st.n}</td><td>${st.wins}</td><td>${wr}%</td><td class="${pnlClass}">${fmtPnl(st.pnl)}</td></tr>`;
+  }).join('');
+  document.getElementById('cat-body').innerHTML = catHtml || '<tr><td colspan="5" style="color:var(--dim)">No data</td></tr>';
+}
+
+async function loadEnrichment() {
+  try {
+    const data = await fetchJSON('/enrichment/test', 120000);
+    if (data.error) {
+      document.getElementById('enrich-summary').textContent = 'Error: ' + data.error;
+      return;
+    }
+
+    const rate = data.enrichment_rate || 0;
+    const enrichEl = document.getElementById('c-enrich');
+    enrichEl.textContent = rate + '%';
+    enrichEl.className = 'card-value ' + (rate > 50 ? 'positive' : rate > 20 ? 'neutral' : 'negative');
+
+    document.getElementById('enrich-summary').innerHTML =
+      `<strong>${data.enriched_count}</strong> of <strong>${data.total_candidates}</strong> candidates have real-time data (${rate}% coverage). ` +
+      'Markets without enrichment rely on LLM general knowledge only.';
+
+    allEnrichSamples = data.samples || [];
+    enrichPage = 0;
+    renderEnrichPage();
+  } catch(e) {
+    document.getElementById('enrich-summary').textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+function renderEnrichPage() {
+  const body = document.getElementById('enrich-body');
+  if (!allEnrichSamples.length) {
+    body.innerHTML = '<tr><td colspan="5" style="color:var(--dim)">No data</td></tr>';
+    document.getElementById('enrich-pagination').innerHTML = '';
+    return;
+  }
+  const totalPages = Math.ceil(allEnrichSamples.length / PAGE_SIZE);
+  if (enrichPage >= totalPages) enrichPage = totalPages - 1;
+  const page = allEnrichSamples.slice(enrichPage * PAGE_SIZE, (enrichPage + 1) * PAGE_SIZE);
+  body.innerHTML = page.map(s => {
+    const enrichLines = s.enrichment ? s.enrichment.replace(/\n/g, '<br>') : '';
+    const tag = s.has_data
+      ? '<span class="tag tag-enriched">DATA</span>'
+      : '<span class="tag tag-none">NONE</span>';
+    return `<tr>
+      <td style="max-width:300px"><a href="${s.web_url || kalshiUrl(s.ticker)}" target="_blank" style="color:var(--accent);text-decoration:none">${s.title || s.ticker}</a></td>
+      <td>${s.category || '--'}</td>
+      <td>$${parseFloat(s.yes_price || 0).toFixed(2)}</td>
+      <td style="font-size:0.85em;color:var(--green)">${enrichLines || '<span style="color:var(--dim)">No data available</span>'}</td>
+      <td>${tag}</td>
+    </tr>`;
+  }).join('');
+  renderPagControls('enrich-pagination', enrichPage, allEnrichSamples.length, 'setEnrichPage');
+}
+
+function setEnrichPage(p) { enrichPage = p; renderEnrichPage(); }
+
+let allPredictions = [];
+let predsPage = 0;
+const predsPerPage = 30;
+
+function renderPredsPage() {
+  const start = predsPage * predsPerPage;
+  const page = allPredictions.slice(start, start + predsPerPage);
+  const totalPages = Math.ceil(allPredictions.length / predsPerPage);
+
+  const html = page.map(p => {
+    const isWin = p.outcome === 'won' || (p.outcome === 'stopped' && (p.pnl||0) > 0);
+    const outcomeClass = isWin ? 'positive' : 'negative';
+    const outcomeText = isWin ? 'WIN' : 'LOSS';
+    const pnlClass = (p.pnl||0) > 0 ? 'positive' : (p.pnl||0) < 0 ? 'negative' : '';
+    const prob = p.arbiter_prob != null ? (p.arbiter_prob * 100).toFixed(0) + '%' : '--';
+    const mktPrice = p.market_yes_price != null ? '$' + parseFloat(p.market_yes_price).toFixed(2) : '--';
+    const edge = p.arbiter_edge != null ? (p.arbiter_edge * 100).toFixed(0) + '%' : '--';
+    const reasoning = (p.arbiter_reasoning || '').substring(0, 60);
+    const fullReasoning = (p.arbiter_reasoning || '').replace(/"/g, '&quot;');
+
+    return `<tr>
+      <td style="white-space:nowrap">${fmtTime(p.timestamp)}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.title||'').replace(/"/g,'&quot;')}"><a href="${kalshiUrl(p.ticker)}" target="_blank" style="color:var(--accent);text-decoration:none">${p.title || p.ticker}</a></td>
+      <td>${prob}</td>
+      <td>${mktPrice}</td>
+      <td>${edge}</td>
+      <td class="side-${p.traded_side}">${(p.traded_side||'').toUpperCase()}</td>
+      <td class="${outcomeClass}">${outcomeText}</td>
+      <td class="${pnlClass}">${fmtPnl(p.pnl)}</td>
+      <td style="color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help" data-full="${fullReasoning}">${reasoning}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('preds-body').innerHTML = html;
+
+  // Pagination controls
+  let pagHtml = '';
+  if (totalPages > 1) {
+    pagHtml += '<button class="page-btn" onclick="predsPage=0;renderPredsPage()">&laquo;</button>';
+    pagHtml += '<button class="page-btn" onclick="predsPage=Math.max(0,predsPage-1);renderPredsPage()">&lsaquo;</button>';
+    pagHtml += '<span class="page-info">' + (predsPage+1) + ' / ' + totalPages + ' (' + allPredictions.length + ' total)</span>';
+    pagHtml += '<button class="page-btn" onclick="predsPage=Math.min(predsPage+1,' + (totalPages-1) + ');renderPredsPage()">&rsaquo;</button>';
+    pagHtml += '<button class="page-btn" onclick="predsPage=' + (totalPages-1) + ';renderPredsPage()">&raquo;</button>';
+  }
+  let pagEl = document.getElementById('preds-pagination');
+  if (!pagEl) {
+    pagEl = document.createElement('div');
+    pagEl.id = 'preds-pagination';
+    pagEl.className = 'pagination';
+    document.getElementById('preds-body').closest('.section-body').appendChild(pagEl);
+  }
+  pagEl.innerHTML = pagHtml;
+}
+
+async function loadPredictions() {
+  const data = await fetchJSON('/calibration/predictions');
+  if (!data.length) {
+    document.getElementById('preds-body').innerHTML = '<tr><td colspan="9" style="color:var(--dim)">No predictions yet</td></tr>';
+    return;
+  }
+  allPredictions = data;
+  // Cache web URLs from predictions
+  for (const p of data) {
+    if (p.web_url) _webUrls[p.ticker] = p.web_url;
+  }
+  renderPredsPage();
+}
+
+
+async function loadSportsArb() {
+  try {
+    const data = await fetchJSON('/sports/arb', 90000);
+    const badge = document.getElementById('sports-badge');
+    const summary = document.getElementById('sports-summary');
+
+    if (data.error && data.error.includes('Sports scanner not installed')) {
+      badge.textContent = 'DISABLED';
+      badge.style.background = 'rgba(248,113,113,0.15)';
+      badge.style.color = 'var(--red)';
+      summary.innerHTML = 'Set <code style="background:rgba(129,140,248,0.1);padding:2px 6px;border-radius:3px;font-family:monospace;font-size:0.9em">SPORTS_ENABLED=true</code> in <code style="background:rgba(129,140,248,0.1);padding:2px 6px;border-radius:3px;font-family:monospace;font-size:0.9em">.env</code> to enable ESPN sports arbitrage scanning';
+      document.getElementById('sports-body').innerHTML = '<tr><td colspan="7" style="color:var(--dim)">Sports scanner not available</td></tr>';
+      return;
+    }
+
+    if (data.error) {
+      badge.textContent = 'ERROR';
+      badge.style.background = 'rgba(248,113,113,0.15)';
+      badge.style.color = 'var(--red)';
+      summary.textContent = 'Error: ' + data.error;
+      document.getElementById('sports-body').innerHTML = '<tr><td colspan="7" style="color:var(--dim)">' + data.error + '</td></tr>';
+      return;
+    }
+
+    const enabled = data.count > 0;
+    badge.textContent = enabled ? 'ENABLED' : 'NO OPPS';
+    badge.style.background = enabled ? 'rgba(52,211,153,0.15)' : 'rgba(251,191,36,0.15)';
+    badge.style.color = enabled ? 'var(--green)' : 'var(--amber)';
+    badge.style.border = enabled ? '1px solid rgba(52,211,153,0.3)' : '1px solid rgba(251,191,36,0.3)';
+
+    summary.innerHTML = '<strong>' + data.count + '</strong> arbitrage opportunit' + (data.count === 1 ? 'y' : 'ies') + ' found';
+
+    allSportsOpps = data.opportunities || [];
+    sportsPage = 0;
+    renderSportsPage();
+  } catch(e) {
+    document.getElementById('sports-summary').textContent = 'Failed to load: ' + e.message;
+    document.getElementById('sports-badge').textContent = 'ERROR';
+    document.getElementById('sports-badge').style.background = 'rgba(248,113,113,0.15)';
+    document.getElementById('sports-badge').style.color = 'var(--red)';
+  }
+}
+
+function renderSportsPage() {
+  const body = document.getElementById('sports-body');
+  if (!allSportsOpps.length) {
+    body.innerHTML = '<tr><td colspan="7" style="color:var(--dim)">No arbitrage opportunities detected</td></tr>';
+    document.getElementById('sports-pagination').innerHTML = '';
+    return;
+  }
+  const totalPages = Math.ceil(allSportsOpps.length / PAGE_SIZE);
+  if (sportsPage >= totalPages) sportsPage = totalPages - 1;
+  const page = allSportsOpps.slice(sportsPage * PAGE_SIZE, (sportsPage + 1) * PAGE_SIZE);
+  body.innerHTML = page.map(opp => {
+    const edge = opp.edge != null ? (parseFloat(opp.edge) * 100).toFixed(1) : '--';
+    const edgeNum = parseFloat(edge);
+    const edgeColor = edgeNum > 10 ? 'var(--green)' : edgeNum >= 5 ? 'var(--amber)' : 'var(--text)';
+    const kalshiPrice = opp.kalshi_price != null ? '$' + parseFloat(opp.kalshi_price).toFixed(2) : '--';
+    const vegasProb = opp.espn_prob != null ? (parseFloat(opp.espn_prob) * 100).toFixed(1) + '%' : '--';
+    const ticker = opp.ticker || '';
+    const marketLink = ticker
+      ? '<a href="https://kalshi.com/markets/' + ticker.toLowerCase() + '" target="_blank">' + (opp.market || ticker) + '</a>'
+      : (opp.market || '--');
+    const statusTag = opp.status === 'live'
+      ? '<span class="tag tag-enriched">LIVE</span>'
+      : '<span class="tag tag-none">' + (opp.status || 'PENDING').toUpperCase() + '</span>';
+    return '<tr>' +
+      '<td>' + (opp.sport || '--') + '</td>' +
+      '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + marketLink + '</td>' +
+      '<td>' + kalshiPrice + '</td>' +
+      '<td>' + vegasProb + '</td>' +
+      '<td style="color:' + edgeColor + ';font-weight:600">' + edge + '%</td>' +
+      '<td style="font-size:0.85em">' + (opp.moneyline ? 'DraftKings ML ' + opp.moneyline : '--') + '</td>' +
+      '<td>' + statusTag + '</td>' +
+      '</tr>';
+  }).join('');
+  renderPagControls('sports-pagination', sportsPage, allSportsOpps.length, 'setSportsPage');
+}
+
+function setSportsPage(p) { sportsPage = p; renderSportsPage(); }
+
+async function refresh() {
+  document.getElementById('updated').textContent = new Date().toLocaleTimeString();
+  await Promise.all([loadCalibration(), loadPredictions()]);
+  // Enrichment test is slower (scans markets), load separately
+  loadEnrichment();
+  // Sports arb scanner
+  loadSportsArb();
+}
+
+refresh();
+setInterval(refresh, 60000);
+
+// Reasoning tooltip — show full text on hover
+document.addEventListener('mouseover', function(e) {
+  var cell = e.target.closest('td[data-full]');
+  if (cell && cell.getAttribute('data-full')) {
+    var tt = document.getElementById('chart-tooltip');
+    var ttTitle = document.getElementById('tt-title');
+    var ttDetail = document.getElementById('tt-detail');
+    ttTitle.textContent = 'Reasoning';
+    ttDetail.textContent = cell.getAttribute('data-full');
+    tt.style.display = 'block';
+    var lx = e.clientX + 14;
+    var ly = e.clientY - 8;
+    if (lx + 340 > window.innerWidth) lx = e.clientX - 340;
+    if (ly + 80 > window.innerHeight) ly = e.clientY - 80;
+    tt.style.left = lx + 'px';
+    tt.style.top = ly + 'px';
+  }
+});
+document.addEventListener('mouseout', function(e) {
+  var cell = e.target.closest('td[data-full]');
+  if (cell) {
+    document.getElementById('chart-tooltip').style.display = 'none';
+  }
+});
+</script>
+</body>
+</html>
