@@ -7,7 +7,7 @@ import re
 import sqlite3
 import os
 from pathlib import Path
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -621,7 +621,7 @@ _ALLOWED_KEYS = {
     "FRED_API_KEY", "OPENWEATHER_API_KEY",
     "SPORTS_ENABLED", "SPORTS_SCAN_INTERVAL", "ODDS_API_KEY",
     "COLLECTIVE_ENABLED", "COLLECTIVE_SERVER", "COLLECTIVE_API_KEY",
-    "DB_PATH", "LOG_LEVEL", "DASHBOARD_HOST", "DASHBOARD_PORT",
+    "DB_PATH", "LOG_LEVEL", "DASHBOARD_HOST", "DASHBOARD_PORT", "DASHBOARD_MODE",
 }
 _SECRET_KEYS = {
     "KALSHI_API_KEY_ID", "ANTHROPIC_API_KEY", "XAI_API_KEY",
@@ -722,20 +722,30 @@ def dashboard():
     return app.send_static_file("index.html")
 
 
+# Public-facing pages only served on ktrader.dev (DASHBOARD_MODE=public)
+_PUBLIC_MODE = os.environ.get("DASHBOARD_MODE", "") == "public"
+
+
 @app.route("/setup")
 def setup_page():
-    return app.send_static_file("setup.html")
+    if _PUBLIC_MODE:
+        return app.send_static_file("setup.html")
+    return app.send_static_file("index.html")
 
 
 @app.route("/collective")
 @app.route("/collective/")
 def collective_page():
-    return app.send_static_file("collective.html")
+    if _PUBLIC_MODE:
+        return app.send_static_file("collective.html")
+    return redirect("https://ktrader.dev/collective")
 
 
 @app.route("/")
 def landing():
-    return app.send_static_file("landing.html")
+    if _PUBLIC_MODE:
+        return app.send_static_file("landing.html")
+    return app.send_static_file("index.html")
 
 
 if __name__ == "__main__":

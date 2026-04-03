@@ -89,6 +89,8 @@ ktrader includes an opt-in collective intelligence layer. Members share anonymiz
 
 **Membership is capped.** The edge is inversely proportional to the number of participants. With hundreds of members, each gets meaningful alpha. At mass adoption, the collective signal converges to the market price itself. The cap keeps the collective useful. Apply at https://ktrader.dev/collective.
 
+**Why not run your own?** You can -- the server code is right here under MIT. But a collective with 3 members produces noise, not signal. The value comes from the network: hundreds of independent bots analyzing the same markets with different models, data sources, and strategies. The official collective at ktrader.dev has the membership base and signal history. A fork starts at zero.
+
 To enable: set `COLLECTIVE_ENABLED=true` and `COLLECTIVE_API_KEY=your-key` in `.env`.
 
 ## Data Enrichment Sources
